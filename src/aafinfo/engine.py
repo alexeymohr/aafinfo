@@ -20,6 +20,9 @@ from aafinfo.formatting import (
     edit_rate_fraction,
     edit_units_to_timecode,
     format_edit_rate,
+    frame_rate_label,
+    frames_to_timecode,
+    timecode_format_label,
 )
 from aafinfo.models import (
     ClipEntry,
@@ -27,6 +30,7 @@ from aafinfo.models import (
     InputInfo,
     MarkerEntry,
     ReportModel,
+    SourceProperties,
     SourceMobEntry,
     TrackEntry,
     TrackKind,
@@ -38,6 +42,14 @@ from aafinfo.models import (
 class _PositionedClip:
     clip: components.SourceClip
     start_edit_units: int
+
+
+@dataclass(frozen=True)
+class _TimecodeInfo:
+    start_frames: int
+    fps: int
+    drop: bool
+    edit_rate: object
 
 
 def build_report(path: Path) -> ReportModel:
@@ -99,6 +111,7 @@ def _build_report(aaf_file: object, input_info: InputInfo) -> ReportModel:
     embedded_mob_ids = _embedded_mob_ids(content)
     composition = _select_composition(content, warnings)
     edit_rate = _composition_edit_rate(composition, warnings)
+    timecode_info = _composition_timecode_info(composition)
 
     tracks, clips, markers = _extract_composition(composition, edit_rate, warnings)
     source_mobs = _extract_source_mobs(content, embedded_mob_ids, warnings)
@@ -126,6 +139,13 @@ def _build_report(aaf_file: object, input_info: InputInfo) -> ReportModel:
         run_id=str(uuid4()),
         run_started_at=datetime.now(timezone.utc).isoformat(),
         input=input_info,
+        source_properties=_source_properties(
+            aaf_file,
+            composition_summary,
+            source_mobs,
+            timecode_info,
+            composition,
+        ),
         composition=composition_summary,
         tracks=tracks,
         clips=clips,
@@ -173,6 +193,159 @@ def _composition_edit_rate(
         )
     )
     return 25
+
+
+def _composition_timecode_info(composition: mobs.CompositionMob) -> _TimecodeInfo | None:
+    for slot in _safe_iter(composition.slots):
+        if _track_kind(_safe_text(getattr(slot, "media_kind", None))) != "timecode":
+            continue
+
+        timecode = _find_timecode_segment(getattr(slot, "segment", None))
+        if timecode is None:
+            continue
+
+        start = _safe_int(_safe_get_value(timecode, "Start"))
+        fps = _safe_int(_safe_get_value(timecode, "FPS"))
+        edit_rate = _safe_get_value(slot, "EditRate")
+        if start is None or fps is None or edit_rate is None:
+            continue
+
+        return _TimecodeInfo(
+            start_frames=start,
+            fps=fps,
+            drop=bool(_safe_get_value(timecode, "Drop")),
+            edit_rate=edit_rate,
+        )
+    return None
+
+
+def _find_timecode_segment(segment: object, visited: set[int] | None = None) -> components.Timecode | None:
+    if segment is None:
+        return None
+
+    visited = visited or set()
+    identity = id(segment)
+    if identity in visited:
+        return None
+    visited.add(identity)
+
+    if isinstance(segment, components.Timecode):
+        return segment
+
+    input_segment = _safe_get_value(segment, "InputSegment")
+    timecode = _find_timecode_segment(input_segment, visited)
+    if timecode is not None:
+        return timecode
+
+    if isinstance(segment, components.Sequence):
+        for component in _safe_iter(segment.components):
+            timecode = _find_timecode_segment(component, visited)
+            if timecode is not None:
+                return timecode
+
+    return None
+
+
+def _source_properties(
+    aaf_file: object,
+    composition: CompositionSummary,
+    source_mobs: list[SourceMobEntry],
+    timecode_info: _TimecodeInfo | None,
+    composition_mob: mobs.CompositionMob,
+) -> SourceProperties:
+    return SourceProperties(
+        name=composition.name,
+        file_type="AAF File",
+        start_timecode=_start_timecode_label(timecode_info),
+        timecode_format=_timecode_format_label(timecode_info, composition.edit_rate),
+        created_by=_created_by(aaf_file),
+        audio_bit_depths=_audio_bit_depths(source_mobs),
+        audio_sample_rates=_audio_sample_rates(source_mobs),
+        audio_file_types=_audio_file_types(source_mobs),
+        video_frame_rate=_video_frame_rate(composition_mob, timecode_info, composition.edit_rate),
+    )
+
+
+def _start_timecode_label(timecode_info: _TimecodeInfo | None) -> str | None:
+    if timecode_info is None:
+        return None
+    return frames_to_timecode(
+        timecode_info.start_frames,
+        timecode_info.fps,
+        drop=timecode_info.drop,
+    )
+
+
+def _timecode_format_label(timecode_info: _TimecodeInfo | None, edit_rate: object) -> str:
+    if timecode_info is None:
+        return timecode_format_label(edit_rate)
+    return timecode_format_label(
+        timecode_info.edit_rate,
+        fps=timecode_info.fps,
+        drop=timecode_info.drop,
+    )
+
+
+def _created_by(aaf_file: object) -> str | None:
+    identifications = list(_safe_iter(_safe_get_value(getattr(aaf_file, "header", None), "IdentificationList")))
+    if not identifications:
+        return None
+
+    identification = identifications[-1]
+    product_name = _safe_optional_text(_safe_get_value(identification, "ProductName"))
+    version = _safe_optional_text(_safe_get_value(identification, "ProductVersionString"))
+    company = _safe_optional_text(_safe_get_value(identification, "CompanyName"))
+    if product_name and version and version.lower() != "unknown version" and version not in product_name:
+        return f"{product_name} {version}"
+    if product_name:
+        return product_name
+    return company
+
+
+def _audio_bit_depths(source_mobs: list[SourceMobEntry]) -> list[int]:
+    return sorted(
+        {
+            source.bit_depth
+            for source in source_mobs
+            if source.kind == "audio" and source.bit_depth is not None
+        }
+    )
+
+
+def _audio_sample_rates(source_mobs: list[SourceMobEntry]) -> list[int]:
+    return sorted(
+        {
+            source.sample_rate
+            for source in source_mobs
+            if source.kind == "audio" and source.sample_rate is not None
+        }
+    )
+
+
+def _audio_file_types(source_mobs: list[SourceMobEntry]) -> list[str]:
+    audio_sources = [source for source in source_mobs if source.kind == "audio"]
+    if any(source.is_embedded for source in audio_sources):
+        return ["Embedded"]
+    if any(source.linked_paths for source in audio_sources):
+        return ["Linked"]
+    return []
+
+
+def _video_frame_rate(
+    composition: mobs.CompositionMob,
+    timecode_info: _TimecodeInfo | None,
+    fallback_edit_rate: object,
+) -> str:
+    for slot in _safe_iter(composition.slots):
+        if _track_kind(_safe_text(getattr(slot, "media_kind", None))) != "video":
+            continue
+        edit_rate = _safe_get_value(slot, "EditRate")
+        if edit_rate is not None:
+            return frame_rate_label(edit_rate)
+
+    if timecode_info is not None:
+        return frame_rate_label(timecode_info.edit_rate)
+    return frame_rate_label(fallback_edit_rate)
 
 
 def _extract_composition(
@@ -414,6 +587,11 @@ def _extract_source_mobs(
 def _source_mob_entry(source_mob: mobs.SourceMob, embedded_mob_ids: set[str]) -> SourceMobEntry:
     descriptor = _safe_get_value(source_mob, "EssenceDescription")
     descriptors = list(_descriptor_tree(descriptor))
+    wav_summaries = [
+        summary
+        for summary in (_wav_summary(_safe_get_value(desc, "Summary")) for desc in descriptors)
+        if summary
+    ]
     slot_lengths = [
         _safe_int(getattr(slot, "length", None))
         for slot in _safe_iter(getattr(source_mob, "slots", []))
@@ -428,6 +606,12 @@ def _source_mob_entry(source_mob: mobs.SourceMob, embedded_mob_ids: set[str]) ->
         for count in (_safe_int(_safe_get_value(desc, "Channels")) for desc in descriptors)
         if count is not None
     ]
+    if not channel_counts:
+        channel_counts = [
+            summary["channels"]
+            for summary in wav_summaries
+            if "channels" in summary
+        ]
     linked_paths = sorted(
         {
             path
@@ -444,8 +628,14 @@ def _source_mob_entry(source_mob: mobs.SourceMob, embedded_mob_ids: set[str]) ->
         kind=_source_mob_kind(descriptors, slot_media_kinds),
         is_embedded=mob_id in embedded_mob_ids,
         linked_paths=linked_paths,
-        sample_rate=_first_int_property(descriptors, ("AudioSamplingRate", "SampleRate")),
-        bit_depth=_first_int_property(descriptors, ("QuantizationBits",)),
+        sample_rate=(
+            _first_int_property(descriptors, ("AudioSamplingRate", "SampleRate"))
+            or _first_summary_value(wav_summaries, "sample_rate")
+        ),
+        bit_depth=(
+            _first_int_property(descriptors, ("QuantizationBits", "BitsPerSample"))
+            or _first_summary_value(wav_summaries, "bit_depth")
+        ),
         channel_count=sum(channel_counts) if len(channel_counts) > 1 else (channel_counts[0] if channel_counts else None),
         length_edit_units=(
             _first_int_property(descriptors, ("Length",))
@@ -588,6 +778,42 @@ def _first_int_property(descriptors: Sequence[object], names: Sequence[str]) -> 
             if value is not None:
                 return value
     return None
+
+
+def _first_summary_value(summaries: Sequence[dict[str, int]], key: str) -> int | None:
+    for summary in summaries:
+        value = summary.get(key)
+        if value is not None:
+            return value
+    return None
+
+
+def _wav_summary(value: object) -> dict[str, int]:
+    if value is None:
+        return {}
+
+    try:
+        data = bytes(value)  # type: ignore[arg-type]
+    except (TypeError, ValueError):
+        return {}
+
+    if len(data) < 36 or data[:4] != b"RIFF" or data[8:12] != b"WAVE":
+        return {}
+
+    offset = 12
+    while offset + 8 <= len(data):
+        chunk_id = data[offset:offset + 4]
+        chunk_size = int.from_bytes(data[offset + 4:offset + 8], "little")
+        chunk_start = offset + 8
+        chunk_end = chunk_start + chunk_size
+        if chunk_id == b"fmt " and chunk_size >= 16 and chunk_end <= len(data):
+            return {
+                "channels": int.from_bytes(data[chunk_start + 2:chunk_start + 4], "little"),
+                "sample_rate": int.from_bytes(data[chunk_start + 4:chunk_start + 8], "little"),
+                "bit_depth": int.from_bytes(data[chunk_start + 14:chunk_start + 16], "little"),
+            }
+        offset = chunk_end + (chunk_size % 2)
+    return {}
 
 
 def _safe_int(value: object) -> int | None:

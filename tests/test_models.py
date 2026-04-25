@@ -10,6 +10,7 @@ from aafinfo.models import (
     MarkerEntry,
     ReportModel,
     SourceMobEntry,
+    SourceProperties,
     TrackEntry,
     Warning,
 )
@@ -25,6 +26,17 @@ def sample_report() -> ReportModel:
             basename="example.aaf",
             size_bytes=12,
             sha256="0" * 64,
+        ),
+        source_properties=SourceProperties(
+            name="Example",
+            file_type="AAF File",
+            start_timecode="00:59:50;00",
+            timecode_format="29.97 fps drop",
+            created_by="Avid Media Composer 24.12.1",
+            audio_bit_depths=[24],
+            audio_sample_rates=[48000],
+            audio_file_types=["Embedded"],
+            video_frame_rate="29.97 fps",
         ),
         composition=CompositionSummary(
             name="Example",
@@ -97,6 +109,7 @@ def test_report_model_round_trips_through_dumped_shape() -> None:
     reparsed = ReportModel.model_validate(report.model_dump())
 
     assert reparsed == report
+    assert reparsed.schema_version == 2
 
 
 def test_models_forbid_extra_fields() -> None:

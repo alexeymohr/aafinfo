@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from fractions import Fraction
+import math
 from pathlib import Path, PureWindowsPath
 from typing import Literal
 from urllib.parse import unquote, urlparse
@@ -39,6 +40,30 @@ def edit_rate_decimal(value: object) -> float:
     return float(edit_rate_fraction(value))
 
 
+def frame_rate_label(value: object) -> str:
+    rate = edit_rate_fraction(value)
+    if rate.denominator == 1:
+        return f"{rate.numerator} fps"
+
+    decimal = float(rate)
+    if rate == Fraction(30000, 1001) or rate == Fraction(60000, 1001):
+        return f"{decimal:.2f} fps"
+    value_text = f"{decimal:.3f}".rstrip("0").rstrip(".")
+    return f"{value_text} fps"
+
+
+def timecode_format_label(edit_rate: object, *, fps: int | None = None, drop: bool = False) -> str:
+    if fps is not None and drop:
+        rate = Fraction(fps * 1000, 1001)
+        return f"{float(rate):.2f} fps drop"
+
+    label = frame_rate_label(edit_rate)
+    if fps is not None:
+        suffix = "drop" if drop else "non-drop"
+        return f"{label} {suffix}"
+    return label
+
+
 def edit_units_to_timecode(edit_units: int, edit_rate: object) -> str:
     """Format edit units as HH:MM:SS:FF using exact rational arithmetic."""
     rate = edit_rate_fraction(edit_rate)
@@ -58,6 +83,24 @@ def edit_units_to_timecode(edit_units: int, edit_rate: object) -> str:
     hours = total_minutes // 60
 
     return f"{sign}{hours:02d}:{minutes:02d}:{seconds:02d}:{frames:02d}"
+
+
+def frames_to_timecode(frames: int, fps: int, *, drop: bool = False) -> str:
+    nominal_fps = max(1, int(fps))
+    sign = "-" if frames < 0 else ""
+    frame_number = abs(int(frames))
+
+    if drop and nominal_fps in {30, 60}:
+        frame_number = _drop_frame_timecode_number(frame_number, nominal_fps)
+
+    ff = frame_number % nominal_fps
+    total_seconds = frame_number // nominal_fps
+    ss = total_seconds % 60
+    total_minutes = total_seconds // 60
+    mm = total_minutes % 60
+    hh = total_minutes // 60
+    sep = ";" if drop else ":"
+    return f"{sign}{hh:02d}:{mm:02d}:{ss:02d}{sep}{ff:02d}"
 
 
 def duration_timecode(edit_units: int, edit_rate: object) -> str:
@@ -107,3 +150,17 @@ def channel_format(channel_count: int | None) -> ChannelFormat:
     if channel_count == 8:
         return "7.1"
     return "multi"
+
+
+def _drop_frame_timecode_number(frames: int, fps: int) -> int:
+    drop_frames = int(round(fps * 0.066666))
+    frames_per_minute = fps * 60 - drop_frames
+    frames_per_10_minutes = fps * 60 * 10 - drop_frames * 9
+
+    ten_minute_chunks = frames // frames_per_10_minutes
+    remaining_frames = frames % frames_per_10_minutes
+    dropped = drop_frames * 9 * ten_minute_chunks
+    if remaining_frames >= drop_frames:
+        dropped += drop_frames * math.floor((remaining_frames - drop_frames) / frames_per_minute)
+
+    return frames + dropped

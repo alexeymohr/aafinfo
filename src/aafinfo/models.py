@@ -21,6 +21,18 @@ class InputInfo(SchemaModel):
     sha256: str
 
 
+class SourceProperties(SchemaModel):
+    name: str
+    file_type: str
+    start_timecode: str | None
+    timecode_format: str | None
+    created_by: str | None
+    audio_bit_depths: list[int]
+    audio_sample_rates: list[int]
+    audio_file_types: list[str]
+    video_frame_rate: str | None
+
+
 class CompositionSummary(SchemaModel):
     name: str
     edit_rate: str
@@ -85,11 +97,12 @@ class Warning(SchemaModel):
 
 
 class ReportModel(SchemaModel):
-    schema_version: Literal[1] = 1
+    schema_version: Literal[2] = 2
     aafinfo_version: str
     run_id: str
     run_started_at: str
     input: InputInfo
+    source_properties: SourceProperties
     composition: CompositionSummary
     tracks: list[TrackEntry]
     clips: list[ClipEntry]

@@ -90,8 +90,8 @@ layers directly without going through the CLI. **The model is the contract.**
   `ReportModel`. Public entry point: `build_report(path: Path) -> ReportModel`.
 - `src/aafinfo/models.py` — Pydantic v2 models with `extra="forbid"`.
   Top-level `ReportModel` plus nested types: `InputInfo`, `CompositionSummary`,
-  `TrackEntry`, `ClipEntry`, `SourceMobEntry`, `MarkerEntry`, `Warning`.
-  `schema_version: 1`.
+  `SourceProperties`, `TrackEntry`, `ClipEntry`, `SourceMobEntry`,
+  `MarkerEntry`, `Warning`. `schema_version: 2`.
 - `src/aafinfo/report.py` — Jinja2 HTML rendering. Loads template, inlines
   CSS, produces a single self-contained `.html` file from a `ReportModel`.
 - `src/aafinfo/templates/report.html.j2` — single Jinja2 template.
@@ -158,13 +158,13 @@ If a stable slug cannot be derived, fall back to `report.json` /
 
 ## JSON Report
 
-Schema version: `1`.
+Schema version: `2`.
 
 Top-level shape:
 
 ```jsonc
 {
-  "schema_version": 1,
+  "schema_version": 2,
   "aafinfo_version": "0.1.0",
   "run_id": "uuid",
   "run_started_at": "ISO-8601",
@@ -173,6 +173,17 @@ Top-level shape:
     "basename": "file.aaf",
     "size_bytes": 1234567,
     "sha256": "lower-case-hex"
+  },
+  "source_properties": {
+    "name": "exported composition name",
+    "file_type": "AAF File",
+    "start_timecode": "00:59:50;00",
+    "timecode_format": "29.97 fps drop",
+    "created_by": "Avid Media Composer 24.12.1",
+    "audio_bit_depths": [24],
+    "audio_sample_rates": [48000],
+    "audio_file_types": ["Embedded"],
+    "video_frame_rate": "29.97 fps"
   },
   "composition": {
     "name": "...",

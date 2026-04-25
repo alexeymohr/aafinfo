@@ -41,6 +41,17 @@ class SourceMobRow:
     length_edit_units: str
 
 
+@dataclass(frozen=True)
+class SourcePropertiesDisplay:
+    start_timecode: str
+    timecode_format: str
+    created_by: str
+    audio_bit_depths: str
+    audio_sample_rates: str
+    audio_file_types: str
+    video_frame_rate: str
+
+
 def render_html(
     report: ReportModel,
     *,
@@ -59,12 +70,26 @@ def render_html(
         report=report,
         input_size=byte_size(report.input.size_bytes),
         aaf_version="Unavailable",
+        source_properties=_source_properties_display(report),
         include_clips=include_clips,
         filter_text=(filter_text or "").strip(),
         clip_rows=visible_clip_rows,
         clip_count_total=len(all_clip_rows),
         clip_count_visible=len(visible_clip_rows),
         source_rows=_source_rows(report.source_mobs),
+    )
+
+
+def _source_properties_display(report: ReportModel) -> SourcePropertiesDisplay:
+    properties = report.source_properties
+    return SourcePropertiesDisplay(
+        start_timecode=properties.start_timecode or "-",
+        timecode_format=properties.timecode_format or "-",
+        created_by=properties.created_by or "-",
+        audio_bit_depths=_int_list(properties.audio_bit_depths, suffix=" bit"),
+        audio_sample_rates=_int_list(properties.audio_sample_rates, suffix=" Hz"),
+        audio_file_types=", ".join(properties.audio_file_types) or "-",
+        video_frame_rate=properties.video_frame_rate or "-",
     )
 
 
@@ -145,6 +170,12 @@ def _optional_int(value: int | None, *, suffix: str = "") -> str:
     if value is None:
         return "-"
     return f"{value}{suffix}"
+
+
+def _int_list(values: list[int], *, suffix: str = "") -> str:
+    if not values:
+        return "-"
+    return ", ".join(f"{value}{suffix}" for value in values)
 
 
 def _short_mob_id(mob_id: str) -> str:

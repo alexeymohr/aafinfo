@@ -81,9 +81,11 @@ If an output artifact already exists, AAFinfo writes a numbered sibling such as
 
 ## Output
 
-JSON reports use schema version `1` and include:
+JSON reports use schema version `2` and include:
 
 - input path, basename, size, and SHA-256
+- source properties: name, type, start time, timecode format, creating
+  application, audio format summary, and video frame rate
 - composition summary
 - tracks
 - clips

@@ -11,8 +11,64 @@
   <body>
     <main class="report-shell">
       <header id="header" class="report-header" data-section="header">
-        <p class="eyebrow">AAFinfo report</p>
-        <h1>{{ report.input.basename }}</h1>
+        <p class="eyebrow">Source properties</p>
+        <h1>{{ report.source_properties.name }}</h1>
+        <dl class="source-grid">
+          <div>
+            <dt>Name</dt>
+            <dd>{{ report.source_properties.name }}</dd>
+          </div>
+          <div>
+            <dt>Type</dt>
+            <dd>{{ report.source_properties.file_type }}</dd>
+          </div>
+          <div>
+            <dt>Created by</dt>
+            <dd>{{ source_properties.created_by }}</dd>
+          </div>
+          <div>
+            <dt>Start time</dt>
+            <dd class="mono">{{ source_properties.start_timecode }}</dd>
+          </div>
+          <div>
+            <dt>Timecode format</dt>
+            <dd>{{ source_properties.timecode_format }}</dd>
+          </div>
+          <div>
+            <dt>Video frame rate</dt>
+            <dd>{{ source_properties.video_frame_rate }}</dd>
+          </div>
+          <div>
+            <dt>Audio bit depth(s)</dt>
+            <dd>{{ source_properties.audio_bit_depths }}</dd>
+          </div>
+          <div>
+            <dt>Audio sample rate(s)</dt>
+            <dd>{{ source_properties.audio_sample_rates }}</dd>
+          </div>
+          <div>
+            <dt>Audio file type(s)</dt>
+            <dd>{{ source_properties.audio_file_types }}</dd>
+          </div>
+          <div>
+            <dt>Total length</dt>
+            <dd><span class="mono">{{ report.composition.length_edit_units }}</span> units / <span class="mono">{{ report.composition.length_timecode }}</span></dd>
+          </div>
+          <div>
+            <dt>Track count</dt>
+            <dd>{{ report.composition.track_count }}</dd>
+          </div>
+          <div>
+            <dt>Marker count</dt>
+            <dd>{{ report.composition.marker_count }}</dd>
+          </div>
+        </dl>
+      </header>
+
+      <section id="report-details" class="report-section secondary-section" data-section="report-details">
+        <div class="section-heading">
+          <h2>Report Details</h2>
+        </div>
         <dl class="metadata-grid">
           <div>
             <dt>Input filename</dt>
@@ -27,52 +83,28 @@
             <dd>{{ input_size }}</dd>
           </div>
           <div>
-            <dt>SHA-256</dt>
-            <dd class="mono wrap">{{ report.input.sha256 }}</dd>
-          </div>
-          <div>
             <dt>AAF version</dt>
             <dd>{{ aaf_version }}</dd>
-          </div>
-          <div>
-            <dt>Run timestamp</dt>
-            <dd class="mono">{{ report.run_started_at }}</dd>
           </div>
           <div>
             <dt>AAFinfo version</dt>
             <dd class="mono">{{ report.aafinfo_version }}</dd>
           </div>
           <div>
+            <dt>Schema version</dt>
+            <dd class="mono">{{ report.schema_version }}</dd>
+          </div>
+          <div>
+            <dt>SHA-256</dt>
+            <dd class="mono wrap">{{ report.input.sha256 }}</dd>
+          </div>
+          <div>
+            <dt>Run timestamp</dt>
+            <dd class="mono">{{ report.run_started_at }}</dd>
+          </div>
+          <div>
             <dt>Run id</dt>
             <dd class="mono wrap">{{ report.run_id }}</dd>
-          </div>
-        </dl>
-      </header>
-
-      <section id="composition-summary" class="report-section" data-section="composition-summary">
-        <div class="section-heading">
-          <h2>Composition Summary</h2>
-        </div>
-        <dl class="summary-grid">
-          <div>
-            <dt>Name</dt>
-            <dd>{{ report.composition.name }}</dd>
-          </div>
-          <div>
-            <dt>Edit rate</dt>
-            <dd class="mono">{{ report.composition.edit_rate }}</dd>
-          </div>
-          <div>
-            <dt>Total length</dt>
-            <dd><span class="mono">{{ report.composition.length_edit_units }}</span> units / <span class="mono">{{ report.composition.length_timecode }}</span></dd>
-          </div>
-          <div>
-            <dt>Track count</dt>
-            <dd>{{ report.composition.track_count }}</dd>
-          </div>
-          <div>
-            <dt>Marker count</dt>
-            <dd>{{ report.composition.marker_count }}</dd>
           </div>
         </dl>
       </section>

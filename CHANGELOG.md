@@ -8,3 +8,5 @@
 - Wire the Phase 4 CLI to JSON stdout/file output with slug and collision handling.
 - Add Phase 5 self-contained HTML report rendering with clip filtering.
 - Add Phase 6 smoke flow, CI smoke coverage, and release documentation.
+- Bump report schema to version 2 and add source properties for Pro Tools-style
+  headline reporting.

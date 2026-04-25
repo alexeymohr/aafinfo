@@ -8,8 +8,9 @@ produces both a schema-versioned JSON report and a self-contained HTML report.
 ## Highlights
 
 - Read-only pyaaf2-backed AAF inspection.
-- Schema version 1 Pydantic report model.
-- Composition summary, tracks, clips, source mobs, markers, and warnings.
+- Schema version 2 Pydantic report model.
+- Source properties, composition summary, tracks, clips, source mobs, markers,
+  and warnings.
 - JSON output for automation and library consumers.
 - Self-contained HTML report with inline CSS, no JavaScript, and print styles.
 - `--filter` for render-time clip filtering in HTML.

@@ -12,6 +12,9 @@ from aafinfo.formatting import (
     edit_rate_fraction,
     edit_units_to_timecode,
     format_edit_rate,
+    frame_rate_label,
+    frames_to_timecode,
+    timecode_format_label,
 )
 
 
@@ -26,6 +29,14 @@ def test_edit_rate_helpers_preserve_fractional_rates() -> None:
 def test_timecode_uses_exact_rational_arithmetic() -> None:
     assert edit_units_to_timecode(1234, 25) == "00:00:49:09"
     assert duration_timecode(24000, "24000/1001") == "00:16:41:00"
+
+
+def test_frame_rate_and_drop_frame_labels() -> None:
+    assert frame_rate_label("30000/1001") == "29.97 fps"
+    assert frame_rate_label("24000/1001") == "23.976 fps"
+    assert timecode_format_label("30000/1001", fps=30, drop=True) == "29.97 fps drop"
+    assert timecode_format_label("25/1", fps=25, drop=False) == "25 fps non-drop"
+    assert frames_to_timecode(107592, 30, drop=True) == "00:59:50;00"
 
 
 def test_display_helpers() -> None:

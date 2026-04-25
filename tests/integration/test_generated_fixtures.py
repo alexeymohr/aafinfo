@@ -39,6 +39,12 @@ def test_simple_stereo_fixture_report(tmp_path: Path) -> None:
     assert report.tracks[0].name == "A1-2 Stereo"
     assert report.tracks[0].channel_format == "stereo"
     assert report.tracks[0].clip_count == 4
+    assert report.source_properties.name == "simple_stereo"
+    assert report.source_properties.file_type == "AAF File"
+    assert report.source_properties.audio_bit_depths == [24]
+    assert report.source_properties.audio_sample_rates == [48000]
+    assert report.source_properties.audio_file_types == ["Linked"]
+    assert report.source_properties.video_frame_rate == "25 fps"
     assert [clip.duration_timecode for clip in report.clips] == [
         "00:00:01:00",
         "00:00:02:00",
@@ -84,6 +90,7 @@ def test_embedded_essence_fixture_report(tmp_path: Path) -> None:
     assert len(report.source_mobs) == 1
     assert report.source_mobs[0].is_embedded is True
     assert report.source_mobs[0].linked_paths == []
+    assert report.source_properties.audio_file_types == ["Embedded"]
 
 
 def test_non_integer_rate_fixture_report(tmp_path: Path) -> None:

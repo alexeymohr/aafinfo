@@ -85,7 +85,7 @@ def test_html_report_contains_documented_sections_and_tables(tmp_path: Path) -> 
 
     assert parser.sections == [
         "header",
-        "composition-summary",
+        "report-details",
         "tracks",
         "clips",
         "source-mobs",
@@ -98,6 +98,12 @@ def test_html_report_contains_documented_sections_and_tables(tmp_path: Path) -> 
     assert "@import" not in html
     assert "<style>" in html
     assert "multi_track.aaf" in html
+    assert "Source properties" in html
+    assert "AAF File" in html
+    assert "25 fps" in html
+    assert "48000 Hz" in html
+    assert "24 bit" in html
+    assert "Linked" in html
     assert "dx_1.wav" in " ".join(parser.table_text["clips"])
     assert "mx_1-2.wav" in " ".join(parser.table_text["source-mobs"])
     assert "/Volumes/AAFinfo/dx_1.wav" in parser.titles

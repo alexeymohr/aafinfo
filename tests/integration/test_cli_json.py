@@ -39,7 +39,7 @@ def test_json_only_prints_schema_report(tmp_path: Path) -> None:
 
     assert result.exit_code == 0, result.output
     report = ReportModel.model_validate(json.loads(result.output))
-    assert report.schema_version == 1
+    assert report.schema_version == 2
     assert report.composition.name == "simple_stereo"
     assert report.input.basename == "simple_stereo.aaf"
 
