@@ -4,7 +4,7 @@ from pathlib import Path
 
 import click
 
-from aafinfo import __version__
+from aafinfo._version import __version__
 
 
 @click.command(context_settings={"help_option_names": ["--help"]})

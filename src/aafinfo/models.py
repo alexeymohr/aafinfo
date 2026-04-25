@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 
 TrackKind = Literal["audio", "video", "timecode", "other"]
@@ -11,50 +11,50 @@ SourceMobKind = Literal["audio", "video", "other"]
 
 
 class SchemaModel(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", frozen=True)
 
 
 class InputInfo(SchemaModel):
     path: str
     basename: str
-    size_bytes: int
+    size_bytes: int = Field(ge=0)
     sha256: str
 
 
 class CompositionSummary(SchemaModel):
     name: str
     edit_rate: str
-    edit_rate_decimal: float
-    length_edit_units: int
+    edit_rate_decimal: float = Field(ge=0)
+    length_edit_units: int = Field(ge=0)
     length_timecode: str
-    track_count: int
-    marker_count: int
+    track_count: int = Field(ge=0)
+    marker_count: int = Field(ge=0)
 
 
 class TrackEntry(SchemaModel):
-    index: int
+    index: int = Field(ge=1)
     name: str
     kind: TrackKind
     channel_format: ChannelFormat
-    channel_count: int
-    length_edit_units: int
+    channel_count: int = Field(ge=0)
+    length_edit_units: int = Field(ge=0)
     length_timecode: str
-    clip_count: int
+    clip_count: int = Field(ge=0)
 
 
 class ClipEntry(SchemaModel):
-    track_index: int
-    clip_index: int
+    track_index: int = Field(ge=1)
+    clip_index: int = Field(ge=0)
     name: str
     source_basename: str
     source_mob_id: str
-    in_edit_units: int
-    out_edit_units: int
+    in_edit_units: int = Field(ge=0)
+    out_edit_units: int = Field(ge=0)
     in_timecode: str
     out_timecode: str
     duration_timecode: str
-    fade_in_edit_units: int | None
-    fade_out_edit_units: int | None
+    fade_in_edit_units: int | None = Field(default=None, ge=0)
+    fade_out_edit_units: int | None = Field(default=None, ge=0)
     comment: str | None
 
 
@@ -64,17 +64,17 @@ class SourceMobEntry(SchemaModel):
     kind: SourceMobKind
     is_embedded: bool
     linked_paths: list[str]
-    sample_rate: int | None
-    bit_depth: int | None
-    channel_count: int | None
-    length_edit_units: int | None
+    sample_rate: int | None = Field(default=None, ge=0)
+    bit_depth: int | None = Field(default=None, ge=0)
+    channel_count: int | None = Field(default=None, ge=0)
+    length_edit_units: int | None = Field(default=None, ge=0)
 
 
 class MarkerEntry(SchemaModel):
-    track_index: int | None
+    track_index: int | None = Field(default=None, ge=1)
     name: str
     comment: str | None
-    position_edit_units: int
+    position_edit_units: int = Field(ge=0)
     position_timecode: str
     color: str | None
 
