@@ -52,6 +52,20 @@ def test_audio_channel_combiner_reports_combined_channel_count(tmp_path: Path) -
     assert report.tracks[0].channel_format == "stereo"
 
 
+def test_non_importable_top_level_slots_are_not_reported_as_tracks(tmp_path: Path) -> None:
+    aaf_path = tmp_path / "non-importable-slots.aaf"
+    _write_non_importable_slots_aaf(aaf_path)
+
+    report = build_report(aaf_path)
+
+    assert report.composition.track_count == 1
+    assert len(report.tracks) == 1
+    assert report.tracks[0].index == 1
+    assert report.tracks[0].name == "A19"
+    assert report.tracks[0].kind == "audio"
+    assert report.clips[0].track_index == 1
+
+
 def _write_minimal_aaf(path: Path) -> None:
     with aaf2.open(str(path), "w") as aaf_file:
         source_mob = aaf_file.create.SourceMob("source.wav")
@@ -127,6 +141,44 @@ def _write_channel_combiner_aaf(path: Path) -> None:
             )
 
         slot.segment.components.append(op_group)
+        aaf_file.content.mobs.append(composition)
+
+
+def _write_non_importable_slots_aaf(path: Path) -> None:
+    with aaf2.open(str(path), "w") as aaf_file:
+        source_mob = _add_mono_source(aaf_file, "source.wav")
+
+        composition = aaf_file.create.CompositionMob("Non-importable Slots")
+        composition.usage = "Usage_TopLevel"
+
+        timecode_slot = composition.create_timeline_slot(edit_rate=25)
+        timecode_slot["PhysicalTrackNumber"].value = 1
+        timecode = aaf_file.create.Timecode(fps=25, drop=False)
+        timecode.start = 0
+        timecode.length = 100
+        timecode_slot.segment = timecode
+
+        audio_slot = composition.create_sound_slot(edit_rate=25)
+        audio_slot["PhysicalTrackNumber"].value = 19
+        clip = source_mob.create_source_clip(slot_id=1, start=0, length=100, media_kind="sound")
+        audio_slot.segment.components.append(clip)
+
+        sound_master_datadef = aaf_file.create.DataDef(
+            aaf2.auid.AUID("4c5f53dd-8f49-4522-a814-8f457ea0c999"),
+            "SoundMasterTrack",
+            "",
+        )
+        aaf_file.dictionary.register_def(sound_master_datadef)
+
+        sound_master_slot = composition.create_timeline_slot(edit_rate=25)
+        sound_master_slot["PhysicalTrackNumber"].value = 1
+        sound_master_sequence = aaf_file.create.Sequence("SoundMasterTrack")
+        sound_master_sequence.length = 100
+        sound_master_sequence.components.append(
+            aaf_file.create.Filler(media_kind="SoundMasterTrack", length=100)
+        )
+        sound_master_slot.segment = sound_master_sequence
+
         aaf_file.content.mobs.append(composition)
 
 

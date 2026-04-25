@@ -372,6 +372,9 @@ def _extract_composition(
             marker_slots.append(slot)
             continue
 
+        if not _is_reportable_track_slot(slot):
+            continue
+
         track_index = len(track_slots) + 1
         track_slots.append((track_index, slot))
         physical_number = _safe_int(_safe_get_value(slot, "PhysicalTrackNumber"))
@@ -380,7 +383,7 @@ def _extract_composition(
 
     for track_index, slot in track_slots:
         track_kind = _track_kind(_safe_text(getattr(slot, "media_kind", None)))
-        track_name = _safe_text(getattr(slot, "name", None), fallback=f"Track {track_index}")
+        track_name = _track_name(slot, track_kind, track_index)
         length_edit_units = max(0, _safe_int(getattr(slot, "length", None)) or 0)
         positioned_clips: list[_PositionedClip] = []
 
@@ -445,6 +448,10 @@ def _is_marker_slot(slot: object) -> bool:
     return isinstance(slot, mobslots.EventMobSlot) or media_kind == "descriptivemetadata"
 
 
+def _is_reportable_track_slot(slot: object) -> bool:
+    return _track_kind(_safe_text(getattr(slot, "media_kind", None))) in {"audio", "video"}
+
+
 def _track_kind(media_kind: str) -> TrackKind:
     normalized = media_kind.lower()
     if normalized == "sound":
@@ -454,6 +461,19 @@ def _track_kind(media_kind: str) -> TrackKind:
     if normalized == "timecode":
         return "timecode"
     return "other"
+
+
+def _track_name(slot: object, track_kind: TrackKind, track_index: int) -> str:
+    name = _safe_optional_text(getattr(slot, "name", None))
+    if name is not None:
+        return name
+
+    physical_number = _safe_int(_safe_get_value(slot, "PhysicalTrackNumber"))
+    if track_kind == "audio" and physical_number is not None:
+        return f"A{physical_number}"
+    if track_kind == "video" and physical_number is not None:
+        return f"V{physical_number}"
+    return f"Track {track_index}"
 
 
 def _track_channel_count(
