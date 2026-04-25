@@ -8,7 +8,13 @@ from types import ModuleType
 
 from click.testing import CliRunner
 
-from aafinfo.cli import main, next_available_path, report_stem, slugify
+from aafinfo.cli import (
+    main,
+    next_available_path,
+    next_available_report_paths,
+    report_stem,
+    slugify,
+)
 from aafinfo.models import ReportModel
 
 
@@ -45,10 +51,13 @@ def test_out_writes_slugged_json_report(tmp_path: Path) -> None:
     result = CliRunner().invoke(main, [str(fixture), "--out", str(out_dir)])
 
     assert result.exit_code == 0, result.output
-    output_path = out_dir / "multi-track-report.json"
-    assert result.output.strip() == str(output_path)
-    report = ReportModel.model_validate_json(output_path.read_text(encoding="utf-8"))
+    json_path = out_dir / "multi-track-report.json"
+    html_path = out_dir / "multi-track-report.html"
+    assert result.output.splitlines() == [str(json_path), str(html_path)]
+    report = ReportModel.model_validate_json(json_path.read_text(encoding="utf-8"))
     assert report.composition.name == "multi_track"
+    assert html_path.exists()
+    assert "multi_track" in html_path.read_text(encoding="utf-8")
 
 
 def test_explicit_name_and_collision_numbering(tmp_path: Path) -> None:
@@ -61,9 +70,11 @@ def test_explicit_name_and_collision_numbering(tmp_path: Path) -> None:
     result = CliRunner().invoke(main, [str(fixture), "--out", str(out_dir), "--name", "Scene 12"])
 
     assert result.exit_code == 0, result.output
-    output_path = out_dir / "scene-12-report-01.json"
-    assert result.output.strip() == str(output_path)
-    assert output_path.exists()
+    json_path = out_dir / "scene-12-report-01.json"
+    html_path = out_dir / "scene-12-report-01.html"
+    assert result.output.splitlines() == [str(json_path), str(html_path)]
+    assert json_path.exists()
+    assert html_path.exists()
     assert existing.read_text(encoding="utf-8") == "{}"
 
 
@@ -98,3 +109,12 @@ def test_slug_and_collision_helpers(tmp_path: Path) -> None:
 
     assert first.name == "example-report.json"
     assert second.name == "example-report-01.json"
+
+    paired_json, paired_html = next_available_report_paths(tmp_path, "paired-report")
+    paired_html.write_text("<!doctype html>", encoding="utf-8")
+    numbered_json, numbered_html = next_available_report_paths(tmp_path, "paired-report")
+
+    assert paired_json.name == "paired-report.json"
+    assert paired_html.name == "paired-report.html"
+    assert numbered_json.name == "paired-report-01.json"
+    assert numbered_html.name == "paired-report-01.html"

@@ -2,14 +2,265 @@
 <html lang="en">
   <head>
     <meta charset="utf-8">
-    <title>AAFinfo Report</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>AAFinfo Report - {{ report.input.basename }}</title>
     <style>
-      {{ css }}
+      {{ css | safe }}
     </style>
   </head>
   <body>
-    <main>
-      <h1>AAFinfo Report</h1>
+    <main class="report-shell">
+      <header id="header" class="report-header" data-section="header">
+        <p class="eyebrow">AAFinfo report</p>
+        <h1>{{ report.input.basename }}</h1>
+        <dl class="metadata-grid">
+          <div>
+            <dt>Input filename</dt>
+            <dd>{{ report.input.basename }}</dd>
+          </div>
+          <div>
+            <dt>Full path</dt>
+            <dd class="mono wrap" title="{{ report.input.path }}">{{ report.input.path }}</dd>
+          </div>
+          <div>
+            <dt>File size</dt>
+            <dd>{{ input_size }}</dd>
+          </div>
+          <div>
+            <dt>SHA-256</dt>
+            <dd class="mono wrap">{{ report.input.sha256 }}</dd>
+          </div>
+          <div>
+            <dt>AAF version</dt>
+            <dd>{{ aaf_version }}</dd>
+          </div>
+          <div>
+            <dt>Run timestamp</dt>
+            <dd class="mono">{{ report.run_started_at }}</dd>
+          </div>
+          <div>
+            <dt>AAFinfo version</dt>
+            <dd class="mono">{{ report.aafinfo_version }}</dd>
+          </div>
+          <div>
+            <dt>Run id</dt>
+            <dd class="mono wrap">{{ report.run_id }}</dd>
+          </div>
+        </dl>
+      </header>
+
+      <section id="composition-summary" class="report-section" data-section="composition-summary">
+        <div class="section-heading">
+          <h2>Composition Summary</h2>
+        </div>
+        <dl class="summary-grid">
+          <div>
+            <dt>Name</dt>
+            <dd>{{ report.composition.name }}</dd>
+          </div>
+          <div>
+            <dt>Edit rate</dt>
+            <dd class="mono">{{ report.composition.edit_rate }}</dd>
+          </div>
+          <div>
+            <dt>Total length</dt>
+            <dd><span class="mono">{{ report.composition.length_edit_units }}</span> units / <span class="mono">{{ report.composition.length_timecode }}</span></dd>
+          </div>
+          <div>
+            <dt>Track count</dt>
+            <dd>{{ report.composition.track_count }}</dd>
+          </div>
+          <div>
+            <dt>Marker count</dt>
+            <dd>{{ report.composition.marker_count }}</dd>
+          </div>
+        </dl>
+      </section>
+
+      <section id="tracks" class="report-section" data-section="tracks">
+        <div class="section-heading">
+          <h2>Tracks</h2>
+        </div>
+        <div class="table-wrap">
+          <table data-table="tracks">
+            <thead>
+              <tr>
+                <th scope="col">Index</th>
+                <th scope="col">Name</th>
+                <th scope="col">Kind</th>
+                <th scope="col">Channel format</th>
+                <th scope="col">Length</th>
+                <th scope="col">Clip count</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for track in report.tracks %}
+                <tr>
+                  <td class="mono">{{ track.index }}</td>
+                  <td>{{ track.name }}</td>
+                  <td>{{ track.kind }}</td>
+                  <td>{{ track.channel_format }}</td>
+                  <td><span class="mono">{{ track.length_timecode }}</span> <span class="muted mono">({{ track.length_edit_units }})</span></td>
+                  <td class="mono">{{ track.clip_count }}</td>
+                </tr>
+              {% else %}
+                <tr>
+                  <td colspan="6" class="empty">No tracks found.</td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      {% if include_clips %}
+        <section id="clips" class="report-section" data-section="clips">
+          <div class="section-heading">
+            <h2>Clips</h2>
+            {% if filter_text %}
+              <p>{{ clip_count_visible }} of {{ clip_count_total }} clips matching "{{ filter_text }}"</p>
+            {% else %}
+              <p>{{ clip_count_total }} clips</p>
+            {% endif %}
+          </div>
+          <div class="table-wrap">
+            <table data-table="clips">
+              <thead>
+                <tr>
+                  <th scope="col">Track</th>
+                  <th scope="col">Clip name</th>
+                  <th scope="col">Source basename</th>
+                  <th scope="col">In TC</th>
+                  <th scope="col">Out TC</th>
+                  <th scope="col">Duration</th>
+                  <th scope="col">Fade in</th>
+                  <th scope="col">Fade out</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for row in clip_rows %}
+                  <tr>
+                    <td><span class="mono">{{ row.clip.track_index }}</span> {{ row.track_name }}</td>
+                    <td>{{ row.clip.name }}</td>
+                    <td class="mono" {% if row.source_title %}title="{{ row.source_title }}"{% endif %}>{{ row.clip.source_basename }}</td>
+                    <td class="mono">{{ row.clip.in_timecode }}</td>
+                    <td class="mono">{{ row.clip.out_timecode }}</td>
+                    <td class="mono">{{ row.clip.duration_timecode }}</td>
+                    <td class="mono">{{ row.fade_in }}</td>
+                    <td class="mono">{{ row.fade_out }}</td>
+                  </tr>
+                {% else %}
+                  <tr>
+                    <td colspan="8" class="empty">No clips matched the current filter.</td>
+                  </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      {% endif %}
+
+      <section id="source-mobs" class="report-section" data-section="source-mobs">
+        <div class="section-heading">
+          <h2>Source Mobs</h2>
+        </div>
+        <div class="table-wrap">
+          <table data-table="source-mobs">
+            <thead>
+              <tr>
+                <th scope="col">Mob id</th>
+                <th scope="col">Name</th>
+                <th scope="col">Status</th>
+                <th scope="col">External path basenames</th>
+                <th scope="col">Sample rate</th>
+                <th scope="col">Bit depth</th>
+                <th scope="col">Channels</th>
+                <th scope="col">Length</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for row in source_rows %}
+                <tr>
+                  <td class="mono" title="{{ row.source.mob_id }}">{{ row.short_mob_id }}</td>
+                  <td>{{ row.source.name }}</td>
+                  <td>{{ row.status }}</td>
+                  <td>
+                    {% if row.linked_paths %}
+                      <ul class="path-list">
+                        {% for path in row.linked_paths %}
+                          <li class="mono" title="{{ path.full_path }}">{{ path.basename }}</li>
+                        {% endfor %}
+                      </ul>
+                    {% else %}
+                      <span class="muted">No linked paths</span>
+                    {% endif %}
+                  </td>
+                  <td class="mono">{{ row.sample_rate }}</td>
+                  <td class="mono">{{ row.bit_depth }}</td>
+                  <td class="mono">{{ row.channel_count }}</td>
+                  <td class="mono">{{ row.length_edit_units }}</td>
+                </tr>
+              {% else %}
+                <tr>
+                  <td colspan="8" class="empty">No source mobs found.</td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section id="markers" class="report-section" data-section="markers">
+        <div class="section-heading">
+          <h2>Markers</h2>
+        </div>
+        <div class="table-wrap">
+          <table data-table="markers">
+            <thead>
+              <tr>
+                <th scope="col">Track</th>
+                <th scope="col">Position TC</th>
+                <th scope="col">Name</th>
+                <th scope="col">Comment</th>
+                <th scope="col">Color</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for marker in report.markers %}
+                <tr>
+                  <td class="mono">{{ marker.track_index if marker.track_index is not none else "Composition" }}</td>
+                  <td class="mono">{{ marker.position_timecode }}</td>
+                  <td>{{ marker.name }}</td>
+                  <td>{{ marker.comment or "" }}</td>
+                  <td>
+                    <span class="color-chip" aria-hidden="true"></span>
+                    {{ marker.color or "None" }}
+                  </td>
+                </tr>
+              {% else %}
+                <tr>
+                  <td colspan="5" class="empty">No markers found.</td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section id="warnings" class="report-section" data-section="warnings">
+        <div class="section-heading">
+          <h2>Warnings</h2>
+        </div>
+        {% if report.warnings %}
+          <ul class="warning-list">
+            {% for warning in report.warnings %}
+              <li><span class="mono">{{ warning.code }}</span>: {{ warning.message }}</li>
+            {% endfor %}
+          </ul>
+        {% else %}
+          <p class="empty">No warnings.</p>
+        {% endif %}
+      </section>
     </main>
   </body>
 </html>

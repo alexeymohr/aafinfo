@@ -1,14 +1,284 @@
 :root {
   color-scheme: light;
+  --bg: #f7f8fa;
+  --panel: #ffffff;
+  --text: #14171f;
+  --muted: #5f6877;
+  --line: #d8dde6;
+  --line-strong: #aab3c1;
+  --accent: #9d261d;
+  --code-bg: #eef1f5;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  background: var(--bg);
+  color: var(--text);
+  font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-size: 16px;
+  line-height: 1.45;
 }
 
 body {
-  font-family: system-ui, sans-serif;
-  margin: 2rem;
+  margin: 0;
+}
+
+.report-shell {
+  margin: 0 auto;
+  max-width: 1280px;
+  padding: 32px;
+}
+
+.report-header,
+.report-section {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  margin: 0 0 18px;
+  padding: 22px;
+}
+
+.report-header {
+  border-top: 4px solid var(--text);
+}
+
+.eyebrow {
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0;
+  margin: 0 0 6px;
+  text-transform: uppercase;
+}
+
+h1,
+h2 {
+  letter-spacing: 0;
+  margin: 0;
+}
+
+h1 {
+  font-size: 2rem;
+  line-height: 1.15;
+}
+
+h2 {
+  font-size: 1.05rem;
+  line-height: 1.25;
+}
+
+.section-heading {
+  align-items: baseline;
+  border-bottom: 1px solid var(--line);
+  display: flex;
+  gap: 16px;
+  justify-content: space-between;
+  margin: 0 0 14px;
+  padding-bottom: 10px;
+}
+
+.section-heading p {
+  color: var(--muted);
+  font-size: 0.86rem;
+  margin: 0;
+}
+
+.metadata-grid,
+.summary-grid {
+  display: grid;
+  gap: 12px 18px;
+  margin: 18px 0 0;
+}
+
+.metadata-grid {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.summary-grid {
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+}
+
+dl div {
+  min-width: 0;
+}
+
+dt {
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0;
+  margin: 0 0 4px;
+  text-transform: uppercase;
+}
+
+dd {
+  margin: 0;
+  min-width: 0;
+}
+
+.mono {
+  background: var(--code-bg);
+  border-radius: 3px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+  font-size: 0.86em;
+  padding: 1px 4px;
+}
+
+.wrap {
+  overflow-wrap: anywhere;
+}
+
+.muted {
+  color: var(--muted);
+}
+
+.table-wrap {
+  overflow-x: auto;
+  width: 100%;
+}
+
+table {
+  border-collapse: collapse;
+  min-width: 760px;
+  width: 100%;
+}
+
+th,
+td {
+  border-bottom: 1px solid var(--line);
+  padding: 9px 10px;
+  text-align: left;
+  vertical-align: top;
+}
+
+th {
+  border-bottom-color: var(--line-strong);
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+td {
+  font-size: 0.91rem;
+}
+
+tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+.path-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.path-list li + li {
+  margin-top: 4px;
+}
+
+.empty {
+  color: var(--muted);
+  font-style: italic;
+}
+
+.color-chip {
+  background: var(--line-strong);
+  border: 1px solid var(--muted);
+  display: inline-block;
+  height: 0.8rem;
+  margin-right: 6px;
+  vertical-align: -1px;
+  width: 0.8rem;
+}
+
+.warning-list {
+  margin: 0;
+  padding-left: 20px;
+}
+
+.warning-list li + li {
+  margin-top: 8px;
+}
+
+.warning-list .mono {
+  color: var(--accent);
+}
+
+@media (max-width: 860px) {
+  .report-shell {
+    padding: 18px;
+  }
+
+  .metadata-grid,
+  .summary-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .section-heading {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 6px;
+  }
+}
+
+@media (max-width: 560px) {
+  .report-shell {
+    padding: 12px;
+  }
+
+  .report-header,
+  .report-section {
+    padding: 16px;
+  }
+
+  .metadata-grid,
+  .summary-grid {
+    grid-template-columns: 1fr;
+  }
+
+  h1 {
+    font-size: 1.55rem;
+  }
 }
 
 @media print {
+  :root {
+    --bg: #ffffff;
+    --panel: #ffffff;
+    --text: #000000;
+    --muted: #333333;
+    --line: #b8b8b8;
+    --line-strong: #777777;
+    --code-bg: #f1f1f1;
+  }
+
+  html,
   body {
-    margin: 0.5in;
+    background: #ffffff;
+  }
+
+  .report-shell {
+    max-width: none;
+    padding: 0;
+  }
+
+  .report-header,
+  .report-section {
+    break-inside: avoid;
+    margin-bottom: 14px;
+    padding: 14px;
+  }
+
+  .table-wrap {
+    overflow: visible;
+  }
+
+  table {
+    min-width: 0;
   }
 }

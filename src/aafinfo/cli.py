@@ -10,6 +10,8 @@ from click.core import ParameterSource
 from aafinfo._version import __version__
 from aafinfo.engine import build_report
 from aafinfo.errors import AAFInfoError
+from aafinfo.models import ReportModel
+from aafinfo.report import render_html
 
 
 @click.command(context_settings={"help_option_names": ["--help"]})
@@ -61,8 +63,6 @@ def main(
     name_slug: str | None,
 ) -> None:
     """Inspect FILE and produce JSON/HTML reports."""
-    _ = (filter_text, no_clips)
-
     if json_only and ctx.get_parameter_source("out_dir") is not ParameterSource.DEFAULT:
         raise click.UsageError("--json-only cannot be used with --out.")
 
@@ -86,19 +86,30 @@ def main(
     try:
         out_dir.mkdir(parents=True, exist_ok=True)
         slug = slugify(name_slug or file.stem)
-        output_path = next_available_path(out_dir, report_stem(slug), ".json")
-        output_path.write_text(json_payload + "\n", encoding="utf-8")
+        json_path, html_path = next_available_report_paths(out_dir, report_stem(slug))
+        html_payload = render_html(
+            report,
+            filter_text=filter_text,
+            include_clips=not no_clips,
+        )
+        json_path.write_text(json_payload + "\n", encoding="utf-8")
+        html_path.write_text(html_payload + "\n", encoding="utf-8")
     except OSError as exc:
         click.echo(f"Cannot write report output: {out_dir}", err=True)
         click.echo(f"detail: {exc}", err=True)
         raise click.exceptions.Exit(2) from exc
+    except Exception as exc:
+        click.echo("Cannot render report output.", err=True)
+        click.echo(f"detail: {exc}", err=True)
+        raise click.exceptions.Exit(2) from exc
 
-    click.echo(str(output_path))
+    click.echo(str(json_path))
+    click.echo(str(html_path))
 
 
-def _report_json(report: object) -> str:
+def _report_json(report: ReportModel) -> str:
     return json.dumps(
-        report.model_dump(mode="json"),  # type: ignore[attr-defined]
+        report.model_dump(mode="json"),
         indent=2,
         sort_keys=True,
     )
@@ -125,4 +136,19 @@ def next_available_path(directory: Path, stem: str, suffix: str) -> Path:
         candidate = directory / f"{stem}-{counter:02d}{suffix}"
         if not candidate.exists():
             return candidate
+        counter += 1
+
+
+def next_available_report_paths(directory: Path, stem: str) -> tuple[Path, Path]:
+    json_path = directory / f"{stem}.json"
+    html_path = directory / f"{stem}.html"
+    if not json_path.exists() and not html_path.exists():
+        return json_path, html_path
+
+    counter = 1
+    while True:
+        json_path = directory / f"{stem}-{counter:02d}.json"
+        html_path = directory / f"{stem}-{counter:02d}.html"
+        if not json_path.exists() and not html_path.exists():
+            return json_path, html_path
         counter += 1
