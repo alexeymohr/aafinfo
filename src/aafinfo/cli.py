@@ -1,8 +1,15 @@
 from __future__ import annotations
 
+from collections.abc import Iterator
+from contextlib import contextmanager
+import itertools
 import json
 from pathlib import Path
 import re
+import sys
+from threading import Event, Thread
+import time
+from typing import TextIO
 
 import click
 from click.core import ParameterSource
@@ -67,7 +74,8 @@ def main(
         raise click.UsageError("--json-only cannot be used with --out.")
 
     try:
-        report = build_report(file)
+        with spinner("Inspecting AAF"):
+            report = build_report(file)
     except AAFInfoError as exc:
         click.echo(exc.message, err=True)
         if exc.detail:
@@ -84,16 +92,17 @@ def main(
         return
 
     try:
-        out_dir.mkdir(parents=True, exist_ok=True)
-        slug = slugify(name_slug or file.stem)
-        json_path, html_path = next_available_report_paths(out_dir, report_stem(slug))
-        html_payload = render_html(
-            report,
-            filter_text=filter_text,
-            include_clips=not no_clips,
-        )
-        json_path.write_text(json_payload + "\n", encoding="utf-8")
-        html_path.write_text(html_payload + "\n", encoding="utf-8")
+        with spinner("Writing report"):
+            out_dir.mkdir(parents=True, exist_ok=True)
+            slug = slugify(name_slug or file.stem)
+            json_path, html_path = next_available_report_paths(out_dir, report_stem(slug))
+            html_payload = render_html(
+                report,
+                filter_text=filter_text,
+                include_clips=not no_clips,
+            )
+            json_path.write_text(json_payload + "\n", encoding="utf-8")
+            html_path.write_text(html_payload + "\n", encoding="utf-8")
     except OSError as exc:
         click.echo(f"Cannot write report output: {out_dir}", err=True)
         click.echo(f"detail: {exc}", err=True)
@@ -105,6 +114,43 @@ def main(
 
     click.echo(str(json_path))
     click.echo(str(html_path))
+
+
+@contextmanager
+def spinner(
+    message: str = "Working",
+    delay: float = 0.1,
+    *,
+    stream: TextIO | None = None,
+    enabled: bool | None = None,
+) -> Iterator[None]:
+    stream = stream or sys.stderr
+    if enabled is None:
+        enabled = stream.isatty()
+    if not enabled:
+        yield
+        return
+
+    stop_event = Event()
+
+    def run_spinner() -> None:
+        frames = itertools.cycle("⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏")
+        while not stop_event.is_set():
+            stream.write(f"\r{next(frames)} {message}...")
+            stream.flush()
+            time.sleep(delay)
+
+        stream.write("\r" + " " * (len(message) + 10) + "\r")
+        stream.flush()
+
+    thread = Thread(target=run_spinner, daemon=True)
+
+    try:
+        thread.start()
+        yield
+    finally:
+        stop_event.set()
+        thread.join()
 
 
 def _report_json(report: ReportModel) -> str:

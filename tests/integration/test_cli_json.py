@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+import io
 import importlib.util
 import json
 from pathlib import Path
 import sys
+import time
 from types import ModuleType
 
 from click.testing import CliRunner
@@ -14,6 +16,7 @@ from aafinfo.cli import (
     next_available_report_paths,
     report_stem,
     slugify,
+    spinner,
 )
 from aafinfo.models import ReportModel
 
@@ -30,6 +33,11 @@ def _load_generator() -> ModuleType:
 
 
 generate_all = _load_generator().generate_all
+
+
+class InteractiveBuffer(io.StringIO):
+    def isatty(self) -> bool:
+        return True
 
 
 def test_json_only_prints_schema_report(tmp_path: Path) -> None:
@@ -95,6 +103,26 @@ def test_parse_failure_exits_2(tmp_path: Path) -> None:
 
     assert result.exit_code == 2
     assert "Cannot parse input AAF" in result.output
+
+
+def test_spinner_writes_progress_and_clears_line() -> None:
+    stream = InteractiveBuffer()
+
+    with spinner("Testing", delay=0.001, stream=stream):
+        time.sleep(0.01)
+
+    output = stream.getvalue()
+    assert "Testing" in output
+    assert output.endswith("\r")
+
+
+def test_spinner_is_silent_for_non_interactive_stream() -> None:
+    stream = io.StringIO()
+
+    with spinner("Testing", delay=0.001, stream=stream):
+        pass
+
+    assert stream.getvalue() == ""
 
 
 def test_slug_and_collision_helpers(tmp_path: Path) -> None:
