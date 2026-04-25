@@ -1,0 +1,46 @@
+[project]
+name = "aafinfo"
+version = "0.1.0"
+description = "Read-only JSON and HTML inspector for Advanced Authoring Format files."
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "MIT" }
+authors = [
+  { name = "Alexey Mohr" },
+]
+dependencies = [
+  "click==8.1.8",
+  "jinja2==3.1.6",
+  "pydantic==2.11.7",
+  "pyaaf2",
+]
+
+[project.scripts]
+aafinfo = "aafinfo.cli:main"
+
+[dependency-groups]
+dev = [
+  "pytest==8.4.2",
+  "pytest-cov==6.2.1",
+]
+
+[tool.uv.sources]
+pyaaf2 = { git = "https://github.com/markreidvfx/pyaaf2.git", tag = "v1.7.1" }
+
+[tool.uv]
+constraint-dependencies = [
+  "packaging==25.0",
+]
+
+[build-system]
+requires = ["setuptools==80.9.0"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+aafinfo = ["templates/*.j2", "_static/*.css"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
