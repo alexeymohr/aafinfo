@@ -52,6 +52,13 @@ class _TimecodeInfo:
     edit_rate: object
 
 
+_TRACK_FORMAT_CHANNEL_COUNTS = {
+    2: 2,
+    3: 6,
+    4: 8,
+}
+
+
 def build_report(path: Path) -> ReportModel:
     """Build a structured report for an AAF file."""
     input_info = _input_info(path)
@@ -411,7 +418,7 @@ def _extract_composition(
             if channel_count is not None:
                 source_channel_counts.append(channel_count)
 
-        track_channel_count = max(source_channel_counts, default=0)
+        track_channel_count = _track_channel_count(slot, track_kind, source_channel_counts)
         tracks.append(
             TrackEntry(
                 index=track_index,
@@ -447,6 +454,159 @@ def _track_kind(media_kind: str) -> TrackKind:
     if normalized == "timecode":
         return "timecode"
     return "other"
+
+
+def _track_channel_count(
+    slot: object,
+    track_kind: TrackKind,
+    source_channel_counts: Sequence[int],
+) -> int:
+    if track_kind != "audio":
+        return 0
+
+    track_format_count = _track_format_channel_count(slot)
+    if track_format_count is not None:
+        return track_format_count
+
+    combiner_count = _audio_channel_combiner_channel_count(getattr(slot, "segment", None))
+    if combiner_count is not None:
+        return combiner_count
+
+    if source_channel_counts:
+        return max(source_channel_counts)
+
+    return 1
+
+
+def _track_format_channel_count(slot: object) -> int | None:
+    for tagged_value in _safe_iter(_safe_get_value(slot, "TimelineMobAttributeList")):
+        name = _safe_text(_safe_get_value(tagged_value, "Name"))
+        if name != "_TRACK_FORMAT":
+            continue
+
+        track_format = _safe_int(_safe_get_value(tagged_value, "Value"))
+        if track_format is None:
+            continue
+        return _TRACK_FORMAT_CHANNEL_COUNTS.get(track_format)
+    return None
+
+
+def _audio_channel_combiner_channel_count(
+    segment: object,
+    visited: set[int] | None = None,
+) -> int | None:
+    if segment is None:
+        return None
+
+    visited = visited or set()
+    identity = id(segment)
+    if identity in visited:
+        return None
+    visited.add(identity)
+
+    if isinstance(segment, components.OperationGroup):
+        children = list(_safe_iter(getattr(segment, "segments", [])))
+        if _is_audio_channel_combiner(segment):
+            channels = sum(1 for child in children if _segment_contains_source_clip(child))
+            return channels or (len(children) if children else None)
+
+        counts = [
+            count
+            for child in children
+            if (count := _audio_channel_combiner_channel_count(child, visited)) is not None
+        ]
+        return max(counts, default=None)
+
+    if isinstance(segment, components.Sequence):
+        counts = [
+            count
+            for component in _safe_iter(segment.components)
+            if (count := _audio_channel_combiner_channel_count(component, visited)) is not None
+        ]
+        return max(counts, default=None)
+
+    if isinstance(segment, components.NestedScope):
+        counts = [
+            count
+            for nested_slot in _safe_iter(segment.slots)
+            if (
+                count := _audio_channel_combiner_channel_count(
+                    getattr(nested_slot, "segment", None),
+                    visited,
+                )
+            )
+            is not None
+        ]
+        return max(counts, default=None)
+
+    if isinstance(segment, components.EssenceGroup):
+        counts = [
+            count
+            for choice in _safe_iter(_safe_get_value(segment, "Choices") or [])
+            if (count := _audio_channel_combiner_channel_count(choice, visited)) is not None
+        ]
+        selected = _audio_channel_combiner_channel_count(
+            _safe_get_value(segment, "Selected"),
+            visited,
+        )
+        if selected is not None:
+            counts.append(selected)
+        return max(counts, default=None)
+
+    selected = _safe_get_value(segment, "Selected")
+    if selected is not None:
+        return _audio_channel_combiner_channel_count(selected, visited)
+
+    return None
+
+
+def _is_audio_channel_combiner(segment: components.OperationGroup) -> bool:
+    operation = _safe_get_value(segment, "Operation") or getattr(segment, "operation", None)
+    operation_name = _safe_text(getattr(operation, "name", None)) or _safe_text(
+        _safe_get_value(operation, "Name")
+    )
+    return operation_name.lower() == "audio channel combiner"
+
+
+def _segment_contains_source_clip(segment: object, visited: set[int] | None = None) -> bool:
+    if segment is None:
+        return False
+
+    visited = visited or set()
+    identity = id(segment)
+    if identity in visited:
+        return False
+    visited.add(identity)
+
+    if isinstance(segment, components.SourceClip):
+        return True
+
+    if isinstance(segment, components.Sequence):
+        return any(
+            _segment_contains_source_clip(component, visited)
+            for component in _safe_iter(segment.components)
+        )
+
+    if isinstance(segment, components.OperationGroup):
+        return any(
+            _segment_contains_source_clip(child, visited)
+            for child in _safe_iter(getattr(segment, "segments", []))
+        )
+
+    if isinstance(segment, components.NestedScope):
+        return any(
+            _segment_contains_source_clip(getattr(nested_slot, "segment", None), visited)
+            for nested_slot in _safe_iter(segment.slots)
+        )
+
+    if isinstance(segment, components.EssenceGroup):
+        return any(
+            _segment_contains_source_clip(choice, visited)
+            for choice in _safe_iter(_safe_get_value(segment, "Choices") or [])
+        ) or _segment_contains_source_clip(_safe_get_value(segment, "Selected"), visited)
+
+    selected = _safe_get_value(segment, "Selected")
+    return selected is not None and _segment_contains_source_clip(selected, visited)
 
 
 def _iter_source_clips(
