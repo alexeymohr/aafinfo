@@ -36,9 +36,6 @@ Out of scope for 0.1.0 (reserved for 0.2.0 or later):
 - Embedded essence extraction.
 - Transition and automation deep parsing (basic counts only in 0.1.0).
 - LibAAF / aaftool integration or cross-engine reconciliation.
-- macOS-specific UI shell. That is the AAFpeek app, not this repository.
-- PDF rendering. The HTML report can be printed to PDF by any browser; the
-  CLI does not produce PDFs directly.
 
 ## Permanent Non-Goals
 

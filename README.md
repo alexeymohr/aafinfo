@@ -124,9 +124,6 @@ Out of scope:
 - embedded essence extraction
 - transition and automation deep parsing
 - LibAAF or `aaftool` integration
-- macOS app UI
-- direct PDF generation
-- network features, telemetry, analytics, or update checks
 
 ## Library Use
 
