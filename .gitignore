@@ -10,4 +10,5 @@ build/
 *.egg-info/
 aafinfo-report/
 examples/_generated/
+resources/
 .DS_Store
