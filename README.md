@@ -1,16 +1,160 @@
 # AAFinfo
 
-AAFinfo is a read-only command-line inspector for Advanced Authoring Format
-files. It will emit a schema-versioned JSON report and a self-contained HTML
-report for local review.
+AAFinfo is a local, read-only command-line inspector for Advanced Authoring
+Format (AAF) files. It reads one AAF, builds a schema-versioned report model,
+then emits both JSON and a self-contained HTML report.
 
-This repository is currently at Phase 1 of the v0.1.0 build plan: package
-skeleton, command-line shell, empty model contracts, and CI wiring.
+AAFinfo does not modify input files, write AAFs, call external AAF tools, make
+network requests, run telemetry, or fetch remote assets. The HTML report is a
+single file with inline CSS and no JavaScript.
+
+## Install
+
+This project uses `uv` and Python 3.11 or newer.
+
+```bash
+uv sync --dev --frozen
+```
+
+The current parser dependency is pinned to upstream `markreidvfx/pyaaf2` tag
+`v1.7.1`. A future switch to the project fork is tracked in `TODO.md` and will
+happen after the first upstream PR is open.
+
+## Quick Start
+
+Generate local fixtures:
+
+```bash
+uv run python examples/_generate.py
+```
+
+Inspect a fixture and write reports:
+
+```bash
+uv run aafinfo examples/_generated/simple_stereo.aaf
+```
+
+Default output goes to `./aafinfo-report/`:
+
+```text
+aafinfo-report/simple-stereo-report.json
+aafinfo-report/simple-stereo-report.html
+```
+
+Print JSON only:
+
+```bash
+uv run aafinfo examples/_generated/simple_stereo.aaf --json-only
+```
+
+Run tests and the smoke flow:
+
+```bash
+uv run pytest
+uv run python examples/_smoke.py
+```
+
+## Command Reference
+
+```bash
+uv run aafinfo <file.aaf> [--out <dir>] [--json-only] [--filter <text>]
+                          [--no-clips] [--name <slug>] [--version]
+```
+
+Options:
+
+- `--out <dir>`: directory for report artifacts. Defaults to
+  `./aafinfo-report/`.
+- `--json-only`: write nothing; print schema-versioned JSON to stdout.
+  Mutually exclusive with explicit `--out`.
+- `--filter <text>`: case-insensitive substring filter for the HTML clips
+  table. It matches track name, clip name, and source basename. JSON still
+  contains every clip.
+- `--no-clips`: omit the per-clip table from the HTML report. JSON is
+  unaffected.
+- `--name <slug>`: explicit output filename slug. Without this, the slug is
+  derived from the input filename.
+- `--version`: print the installed AAFinfo version.
+
+If an output artifact already exists, AAFinfo writes a numbered sibling such as
+`simple-stereo-report-01.json` and `simple-stereo-report-01.html`.
+
+## Output
+
+JSON reports use schema version `1` and include:
+
+- input path, basename, size, and SHA-256
+- composition summary
+- tracks
+- clips
+- source mobs
+- markers
+- warnings
+
+HTML reports contain the same report data in this order:
+
+1. Header
+2. Composition summary
+3. Tracks
+4. Clips
+5. Source mobs
+6. Markers
+7. Warnings
+
+The HTML is designed as a factual datasheet and can be printed to PDF by a
+browser. The CLI does not generate PDF files directly.
+
+## Scope
+
+AAFinfo v0.1.0 is the inspection MVP.
+
+In scope:
+
+- one AAF input at a time
+- pyaaf2-backed reading only
+- composition, tracks, clips, source mobs, markers, and warnings
+- JSON and self-contained HTML report output
+- generated test fixtures only, no real-show media in the repository
+
+Out of scope:
+
+- writing or editing AAFs
+- embedded essence extraction
+- transition and automation deep parsing
+- LibAAF or `aaftool` integration
+- macOS app UI
+- direct PDF generation
+- network features, telemetry, analytics, or update checks
+
+## Library Use
+
+The engine and model layers are importable without Click or Jinja2 coupling:
+
+```python
+from pathlib import Path
+
+from aafinfo import build_report
+
+report = build_report(Path("example.aaf"))
+print(report.model_dump(mode="json"))
+```
+
+The model layer is the contract for the forthcoming AAFpeek app.
+
+## Development
+
+Useful commands:
 
 ```bash
 uv run aafinfo --help
+uv run python examples/_generate.py
 uv run pytest
+uv run python examples/_smoke.py
 ```
 
-See `docs/PROJECT_OVERVIEW.md` and `docs/CODEX_HANDOFF.md` for the full scope
-and phased implementation plan.
+CI runs `uv sync --dev --frozen`, `uv run pytest`, and the smoke flow on
+Python 3.11 and 3.12.
+
+## License
+
+MIT. See `LICENSE`.

@@ -29,3 +29,6 @@ jobs:
 
       - name: Run tests
         run: uv run pytest
+
+      - name: Run smoke flow
+        run: uv run python examples/_smoke.py
