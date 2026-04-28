@@ -12,7 +12,7 @@ Read both before planning any work.
 
 - Language: Python 3.11+
 - Package manager: `uv`
-- Engine: `pyaaf2`, pinned to a fork at a specific commit (see `pyproject.toml`)
+- Engine: `pyaaf2`, pinned to upstream tag `v1.7.1` (see `pyproject.toml`)
 - Models: Pydantic v2 with `extra="forbid"`, schema-versioned
 - CLI: Click (single command, no subcommands)
 - Templating: Jinja2, autoescape on

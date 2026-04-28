@@ -20,9 +20,7 @@ produces both a schema-versioned JSON report and a self-contained HTML report.
 
 ## Dependency Note
 
-The current parser dependency is pinned to upstream `markreidvfx/pyaaf2` tag
-`v1.7.1`. The planned switch to the project fork is tracked in `TODO.md` and is
-deferred until the first upstream PR is open.
+The parser dependency is pinned to upstream `markreidvfx/pyaaf2` tag `v1.7.1`.
 
 ## Validation Before Tagging
 

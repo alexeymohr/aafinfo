@@ -120,7 +120,12 @@ def _build_report(aaf_file: object, input_info: InputInfo) -> ReportModel:
     edit_rate = _composition_edit_rate(composition, warnings)
     timecode_info = _composition_timecode_info(composition)
 
-    tracks, clips, markers = _extract_composition(composition, edit_rate, warnings)
+    tracks, clips, markers = _extract_composition(
+        composition,
+        edit_rate,
+        timecode_info,
+        warnings,
+    )
     source_mobs = _extract_source_mobs(content, embedded_mob_ids, warnings)
     source_mobs_by_id = {source.mob_id: source for source in source_mobs}
     clips = [
@@ -331,11 +336,12 @@ def _audio_sample_rates(source_mobs: list[SourceMobEntry]) -> list[int]:
 
 def _audio_file_types(source_mobs: list[SourceMobEntry]) -> list[str]:
     audio_sources = [source for source in source_mobs if source.kind == "audio"]
+    file_types: list[str] = []
     if any(source.is_embedded for source in audio_sources):
-        return ["Embedded"]
+        file_types.append("Embedded")
     if any(source.linked_paths for source in audio_sources):
-        return ["Linked"]
-    return []
+        file_types.append("Linked")
+    return file_types
 
 
 def _video_frame_rate(
@@ -358,6 +364,7 @@ def _video_frame_rate(
 def _extract_composition(
     composition: mobs.CompositionMob,
     edit_rate: object,
+    timecode_info: _TimecodeInfo | None,
     warnings: list[ReportWarning],
 ) -> tuple[list[TrackEntry], list[ClipEntry], list[MarkerEntry]]:
     tracks: list[TrackEntry] = []
@@ -406,6 +413,7 @@ def _extract_composition(
                     track_index,
                     clip_index,
                     edit_rate,
+                    timecode_info,
                     warnings,
                 )
             except Exception as exc:
@@ -435,10 +443,28 @@ def _extract_composition(
             )
         )
         clips.extend(track_clip_entries)
-        markers.extend(_extract_markers(slot, track_index, edit_rate, physical_to_track, warnings))
+        markers.extend(
+            _extract_markers(
+                slot,
+                track_index,
+                edit_rate,
+                timecode_info,
+                physical_to_track,
+                warnings,
+            )
+        )
 
     for slot in marker_slots:
-        markers.extend(_extract_markers(slot, None, edit_rate, physical_to_track, warnings))
+        markers.extend(
+            _extract_markers(
+                slot,
+                None,
+                edit_rate,
+                timecode_info,
+                physical_to_track,
+                warnings,
+            )
+        )
 
     return tracks, clips, markers
 
@@ -677,6 +703,7 @@ def _clip_entry(
     track_index: int,
     clip_index: int,
     edit_rate: object,
+    timecode_info: _TimecodeInfo | None,
     warnings: list[ReportWarning],
 ) -> tuple[ClipEntry, int | None]:
     clip = positioned.clip
@@ -699,8 +726,8 @@ def _clip_entry(
             source_mob_id=source_mob_id,
             in_edit_units=start,
             out_edit_units=end,
-            in_timecode=edit_units_to_timecode(start, edit_rate),
-            out_timecode=edit_units_to_timecode(end, edit_rate),
+            in_timecode=_timeline_position_timecode(start, edit_rate, timecode_info),
+            out_timecode=_timeline_position_timecode(end, edit_rate, timecode_info),
             duration_timecode=duration_timecode(duration, edit_rate),
             fade_in_edit_units=_safe_int(_safe_get_value(clip, "FadeInLength")),
             fade_out_edit_units=_safe_int(_safe_get_value(clip, "FadeOutLength")),
@@ -879,6 +906,7 @@ def _extract_markers(
     slot: object,
     track_index: int | None,
     edit_rate: object,
+    timecode_info: _TimecodeInfo | None,
     physical_to_track: dict[int, int],
     warnings: list[ReportWarning],
 ) -> list[MarkerEntry]:
@@ -899,7 +927,11 @@ def _extract_markers(
                     name=name,
                     comment=comment,
                     position_edit_units=position,
-                    position_timecode=edit_units_to_timecode(position, edit_rate),
+                    position_timecode=_timeline_position_timecode(
+                        position,
+                        edit_rate,
+                        timecode_info,
+                    ),
                     color=_safe_optional_text(_safe_get_value(marker, "CommentMarkerColor")),
                 )
             )
@@ -911,6 +943,31 @@ def _extract_markers(
             )
         )
     return markers
+
+
+def _timeline_position_timecode(
+    edit_units: int,
+    edit_rate: object,
+    timecode_info: _TimecodeInfo | None,
+) -> str:
+    if timecode_info is None:
+        return edit_units_to_timecode(edit_units, edit_rate)
+
+    frame_offset = _timeline_frame_offset(edit_units, edit_rate, timecode_info.edit_rate)
+    return frames_to_timecode(
+        timecode_info.start_frames + frame_offset,
+        timecode_info.fps,
+        drop=timecode_info.drop,
+    )
+
+
+def _timeline_frame_offset(edit_units: int, edit_rate: object, timecode_edit_rate: object) -> int:
+    source_rate = edit_rate_fraction(edit_rate)
+    target_rate = edit_rate_fraction(timecode_edit_rate)
+    if source_rate <= 0 or target_rate <= 0:
+        return 0
+
+    return int(edit_units * target_rate / source_rate)
 
 
 def _iter_markers(segment: object, visited: set[int] | None = None) -> Iterator[components.CommentMarker]:

@@ -16,9 +16,7 @@ This project uses `uv` and Python 3.11 or newer.
 uv sync --dev --frozen
 ```
 
-The current parser dependency is pinned to upstream `markreidvfx/pyaaf2` tag
-`v1.7.1`. A future switch to the project fork is tracked in `TODO.md` and will
-happen after the first upstream PR is open.
+The parser dependency is pinned to upstream `markreidvfx/pyaaf2` tag `v1.7.1`.
 
 ## Quick Start
 
@@ -95,8 +93,8 @@ JSON reports use schema version `2` and include:
 
 HTML reports contain the same report data in this order:
 
-1. Header
-2. Composition summary
+1. Source properties header
+2. Report details
 3. Tracks
 4. Clips
 5. Source mobs

@@ -275,10 +275,12 @@ Cold and readable, not warm or inviting.
 
 Sections, in order:
 
-1. **Header** — input filename, full path, file size, SHA-256, AAF version
-   if extractable, run timestamp, AAFinfo version, run id.
-2. **Composition summary** — name, edit rate, total length (edit units +
-   timecode), track count, marker count.
+1. **Source properties header** — composition name, file type, creating
+   application, start timecode, timecode format, video frame rate, audio
+   format summary, total length, track count, marker count.
+2. **Report details** — input filename, full path, file size, SHA-256, AAF
+   version if extractable, run timestamp, AAFinfo version, schema version,
+   run id.
 3. **Tracks** — table: index, name, kind, channel format, length, clip count.
 4. **Clips** — table: track, clip name, source basename, in TC, out TC,
    duration, fade in/out. Filtered by `--filter` if provided. Hidden by
@@ -322,14 +324,13 @@ arithmetic for sample-accurate strings; never round prematurely.
 
 ## Dependencies
 
-- `pyaaf2` — pinned to a fork until upstream PRs land. In `pyproject.toml`:
+- `pyaaf2` — pinned to upstream `markreidvfx/pyaaf2` tag `v1.7.1` in
+  `pyproject.toml`:
 
   ```toml
   [tool.uv.sources]
-  pyaaf2 = { git = "https://github.com/alexeymohr/pyaaf2.git", rev = "<commit-sha>" }
+  pyaaf2 = { git = "https://github.com/markreidvfx/pyaaf2.git", tag = "v1.7.1" }
   ```
-
-  README documents the open PRs and the path back to upstream.
 - `pydantic` v2.
 - `click`.
 - `jinja2`.

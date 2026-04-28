@@ -33,7 +33,7 @@ This document is the execution plan for AAFinfo v0.1.0. **Read
 
 ### Phase 1 — Skeleton
 
-- `pyproject.toml` with uv-managed deps, pinned pyaaf2 fork, Python 3.11+.
+- `pyproject.toml` with uv-managed deps, pinned pyaaf2 tag, Python 3.11+.
 - Package skeleton: `src/aafinfo/{__init__,cli,engine,models,report,errors,formatting}.py`,
   `src/aafinfo/templates/`, `src/aafinfo/_static/`.
 - Stub Click CLI that accepts `<file.aaf>` and prints `"ok"`.
@@ -123,7 +123,7 @@ browser shows a complete, self-contained, factual report.
   against each, assert exit codes and artifact existence.
 - CI runs the smoke helper on 3.11 and 3.12.
 - README with install, quick start, command reference, output examples,
-  scope and non-goals, license, "uses a fork of pyaaf2 pending PRs" note.
+  scope and non-goals, license, and pyaaf2 dependency note.
 - CHANGELOG `0.1.0` entry.
 - Tag and release notes ready.
 

@@ -66,6 +66,30 @@ def test_non_importable_top_level_slots_are_not_reported_as_tracks(tmp_path: Pat
     assert report.clips[0].track_index == 1
 
 
+def test_clip_and_marker_timecodes_include_timeline_start_and_drop_frame(tmp_path: Path) -> None:
+    aaf_path = tmp_path / "timeline-start.aaf"
+    _write_timeline_start_aaf(aaf_path)
+
+    report = build_report(aaf_path)
+
+    assert report.source_properties.start_timecode == "00:59:50;00"
+    assert report.source_properties.timecode_format == "29.97 fps drop"
+    assert report.clips[0].in_timecode == "00:59:50;00"
+    assert report.clips[0].out_timecode == "00:59:51;00"
+    assert report.markers[0].position_timecode == "01:00:00;00"
+
+
+def test_mixed_embedded_and_linked_audio_file_types_are_both_reported(tmp_path: Path) -> None:
+    aaf_path = tmp_path / "mixed-audio-file-types.aaf"
+    _write_mixed_audio_file_types_aaf(aaf_path)
+
+    report = build_report(aaf_path)
+
+    assert report.source_properties.audio_file_types == ["Embedded", "Linked"]
+    assert {source.is_embedded for source in report.source_mobs} == {False, True}
+    assert any(source.linked_paths == ["/Volumes/Show/linked.wav"] for source in report.source_mobs)
+
+
 def _write_minimal_aaf(path: Path) -> None:
     with aaf2.open(str(path), "w") as aaf_file:
         source_mob = aaf_file.create.SourceMob("source.wav")
@@ -92,6 +116,66 @@ def _write_minimal_aaf(path: Path) -> None:
         slot["PhysicalTrackNumber"].value = 1
         clip = source_mob.create_source_clip(slot_id=1, start=0, length=100, media_kind="sound")
         slot.segment.components.append(clip)
+        aaf_file.content.mobs.append(composition)
+
+
+def _write_timeline_start_aaf(path: Path) -> None:
+    edit_rate = "30000/1001"
+    with aaf2.open(str(path), "w") as aaf_file:
+        source_mob = _add_mono_source(aaf_file, "drop-frame-source.wav", edit_rate=edit_rate, length=300)
+
+        composition = aaf_file.create.CompositionMob("Timeline Start")
+        composition.usage = "Usage_TopLevel"
+
+        timecode_slot = composition.create_timeline_slot(edit_rate=edit_rate)
+        timecode_slot["PhysicalTrackNumber"].value = 1
+        timecode = aaf_file.create.Timecode(fps=30, drop=True)
+        timecode.start = 107592
+        timecode.length = 300
+        timecode_slot.segment = timecode
+
+        audio_slot = composition.create_sound_slot(edit_rate=edit_rate)
+        audio_slot.name = "A1"
+        audio_slot["PhysicalTrackNumber"].value = 1
+        audio_slot.segment.components.append(
+            source_mob.create_source_clip(slot_id=1, start=0, length=30, media_kind="sound")
+        )
+
+        event_slot = aaf_file.create.EventMobSlot()
+        event_slot["EditRate"].value = edit_rate
+        event_slot["SlotID"].value = 1000
+        event_slot["PhysicalTrackNumber"].value = 1
+        sequence = aaf_file.create.Sequence("DescriptiveMetadata")
+        marker = aaf_file.create.DescriptiveMarker()
+        marker["DescribedSlots"].value = {1}
+        marker["Position"].value = 300
+        marker["Comment"].value = "one minute"
+        sequence.components.append(marker)
+        event_slot.segment = sequence
+        composition.slots.append(event_slot)
+
+        aaf_file.content.mobs.append(composition)
+
+
+def _write_mixed_audio_file_types_aaf(path: Path) -> None:
+    with aaf2.open(str(path), "w") as aaf_file:
+        linked = _add_mono_source(
+            aaf_file,
+            "linked.wav",
+            linked_path="/Volumes/Show/linked.wav",
+        )
+        embedded = _add_mono_source(aaf_file, "embedded.wav", embedded=True)
+
+        composition = aaf_file.create.CompositionMob("Mixed Audio File Types")
+        composition.usage = "Usage_TopLevel"
+        for physical_track_number, source_mob in enumerate((linked, embedded), 1):
+            slot = composition.create_sound_slot(edit_rate=25)
+            slot.name = f"A{physical_track_number}"
+            slot["PhysicalTrackNumber"].value = physical_track_number
+            slot.segment.components.append(
+                source_mob.create_source_clip(slot_id=1, start=0, length=25, media_kind="sound")
+            )
+
         aaf_file.content.mobs.append(composition)
 
 
@@ -182,18 +266,36 @@ def _write_non_importable_slots_aaf(path: Path) -> None:
         aaf_file.content.mobs.append(composition)
 
 
-def _add_mono_source(aaf_file: object, name: str) -> object:
+def _add_mono_source(
+    aaf_file: object,
+    name: str,
+    *,
+    edit_rate: object = 25,
+    length: int = 100,
+    linked_path: str | None = None,
+    embedded: bool = False,
+) -> object:
     source_mob = aaf_file.create.SourceMob(name)
     descriptor = aaf_file.create.PCMDescriptor()
     descriptor["AudioSamplingRate"].value = "48000/1"
-    descriptor["SampleRate"].value = "25/1"
-    descriptor["Length"].value = 100
+    descriptor["SampleRate"].value = edit_rate
+    descriptor["Length"].value = length
     descriptor["Channels"].value = 1
     descriptor["QuantizationBits"].value = 24
     descriptor["BlockAlign"].value = 3
     descriptor["AverageBPS"].value = 144000
+    if linked_path is not None:
+        locator = aaf_file.create.NetworkLocator()
+        locator["URLString"].value = linked_path
+        descriptor["Locator"].append(locator)
     source_mob.descriptor = descriptor
-    source_slot = source_mob.create_empty_slot(edit_rate=25, media_kind="sound", slot_id=1)
-    source_slot.segment.length = 100
+    source_slot = source_mob.create_empty_slot(edit_rate=edit_rate, media_kind="sound", slot_id=1)
+    source_slot.segment.length = length
     aaf_file.content.mobs.append(source_mob)
+    if embedded:
+        essence_data = aaf_file.create.EssenceData()
+        essence_data.mob = source_mob
+        aaf_file.content.essencedata.append(essence_data)
+        stream = essence_data.open("w")
+        stream.write(b"embedded fixture data\n")
     return source_mob
