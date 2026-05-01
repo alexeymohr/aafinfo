@@ -24,9 +24,10 @@ def test_build_report_returns_populated_model_for_minimal_aaf(tmp_path: Path) ->
     assert report.tracks[0].channel_count == 2
     assert report.clips[0].source_basename == "source.wav"
     assert report.clips[0].duration_timecode == "00:00:04:00"
-    assert report.source_mobs[0].sample_rate == 48000
-    assert report.source_mobs[0].bit_depth == 24
-    assert report.source_mobs[0].linked_paths == ["/Volumes/Show/source.wav"]
+    source_entry = next(source for source in report.source_mobs if source.role == "source")
+    assert source_entry.sample_rate == 48000
+    assert source_entry.bit_depth == 24
+    assert source_entry.linked_paths == ["/Volumes/Show/source.wav"]
     assert report.warnings == []
 
 
@@ -39,6 +40,9 @@ def test_audio_track_without_source_channel_metadata_reports_mono(tmp_path: Path
     assert report.tracks[0].kind == "audio"
     assert report.tracks[0].channel_count == 1
     assert report.tracks[0].channel_format == "mono"
+    assert report.summary.source_files.count == 1
+    assert report.summary.source_files.embedded == 0
+    assert report.summary.source_files.linked == 1
 
 
 def test_audio_channel_combiner_reports_combined_channel_count(tmp_path: Path) -> None:
@@ -86,8 +90,24 @@ def test_mixed_embedded_and_linked_audio_file_types_are_both_reported(tmp_path: 
     report = build_report(aaf_path)
 
     assert report.source_properties.audio_file_types == ["Embedded", "Linked"]
-    assert {source.is_embedded for source in report.source_mobs} == {False, True}
+    source_file_mobs = [source for source in report.source_mobs if source.role == "source"]
+    assert {source.is_embedded for source in source_file_mobs} == {False, True}
+    assert report.summary.source_files.count == 2
+    assert report.summary.source_files.embedded == 1
+    assert report.summary.source_files.linked == 1
     assert any(source.linked_paths == ["/Volumes/Show/linked.wav"] for source in report.source_mobs)
+
+
+def test_source_mob_roles_include_composition_master_and_source(tmp_path: Path) -> None:
+    aaf_path = tmp_path / "mob-roles.aaf"
+    _write_mob_roles_aaf(aaf_path)
+
+    report = build_report(aaf_path)
+
+    assert {entry.role for entry in report.source_mobs} == {"composition", "master", "source"}
+    assert report.summary.source_files.count == 1
+    assert report.summary.source_files.embedded == 0
+    assert report.summary.source_files.linked == 1
 
 
 def _write_minimal_aaf(path: Path) -> None:
@@ -176,6 +196,27 @@ def _write_mixed_audio_file_types_aaf(path: Path) -> None:
                 source_mob.create_source_clip(slot_id=1, start=0, length=25, media_kind="sound")
             )
 
+        aaf_file.content.mobs.append(composition)
+
+
+def _write_mob_roles_aaf(path: Path) -> None:
+    with aaf2.open(str(path), "w") as aaf_file:
+        source_mob = _add_mono_source(
+            aaf_file,
+            "role-source.wav",
+            linked_path="/Volumes/Show/role-source.wav",
+        )
+        master_mob = aaf_file.create.MasterMob("Role Master")
+        aaf_file.content.mobs.append(master_mob)
+
+        composition = aaf_file.create.CompositionMob("Role Composition")
+        composition.usage = "Usage_TopLevel"
+        slot = composition.create_sound_slot(edit_rate=25)
+        slot.name = "A1"
+        slot["PhysicalTrackNumber"].value = 1
+        slot.segment.components.append(
+            source_mob.create_source_clip(slot_id=1, start=0, length=25, media_kind="sound")
+        )
         aaf_file.content.mobs.append(composition)
 
 

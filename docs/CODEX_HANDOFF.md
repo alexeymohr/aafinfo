@@ -87,7 +87,7 @@ end-to-end.
 ### Phase 4 — CLI and JSON
 
 - Wire `cli.py` to `engine.build_report`.
-- Implement `--json-only`, `--out`, `--name`, `--version`, exit codes.
+- Implement `--json`, `--json-only`, `--out`, `--name`, `--version`, exit codes.
 - Slug derivation from input filename: lowercase, replace runs of
   non-alphanumerics with single dashes, strip leading/trailing dashes; fall
   back to `report` if empty.
@@ -95,8 +95,8 @@ end-to-end.
 - Integration tests: full CLI invocation via Click's `CliRunner`, JSON
   round-trips through Pydantic, exit code coverage.
 
-**Deliverable:** `uv run aafinfo path/to/fixture.aaf --json-only` prints
-valid schema-1 JSON. `uv run aafinfo path/to/fixture.aaf --out ./out` writes
+**Deliverable:** `uv run aafinfo path/to/fixture.aaf --json` prints
+valid schema JSON. `uv run aafinfo path/to/fixture.aaf --out ./out` writes
 `<slug>-report.json`.
 
 ### Phase 5 — HTML Report

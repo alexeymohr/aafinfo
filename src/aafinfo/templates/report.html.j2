@@ -202,6 +202,7 @@
               <tr>
                 <th scope="col">Mob id</th>
                 <th scope="col">Name</th>
+                <th scope="col">Role</th>
                 <th scope="col">Status</th>
                 <th scope="col">External path basenames</th>
                 <th scope="col">Sample rate</th>
@@ -215,6 +216,7 @@
                 <tr>
                   <td class="mono" title="{{ row.source.mob_id }}">{{ row.short_mob_id }}</td>
                   <td>{{ row.source.name }}</td>
+                  <td>{{ row.source.role }}</td>
                   <td>{{ row.status }}</td>
                   <td>
                     {% if row.linked_paths %}
@@ -234,7 +236,7 @@
                 </tr>
               {% else %}
                 <tr>
-                  <td colspan="8" class="empty">No source mobs found.</td>
+                  <td colspan="9" class="empty">No source mobs found.</td>
                 </tr>
               {% endfor %}
             </tbody>

@@ -38,9 +38,11 @@ from aafinfo.report import render_html
     help="Directory for report artifacts.",
 )
 @click.option(
+    "--json",
     "--json-only",
+    "json_only",
     is_flag=True,
-    help="Write nothing; print JSON to stdout.",
+    help="Write nothing; print JSON to stdout. Synonym: --json-only.",
 )
 @click.option(
     "--filter",
@@ -71,7 +73,7 @@ def main(
 ) -> None:
     """Inspect FILE and produce JSON/HTML reports."""
     if json_only and ctx.get_parameter_source("out_dir") is not ParameterSource.DEFAULT:
-        raise click.UsageError("--json-only cannot be used with --out.")
+        raise click.UsageError("--json/--json-only cannot be used with --out.")
 
     try:
         with spinner("Inspecting AAF"):

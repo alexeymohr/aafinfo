@@ -30,7 +30,9 @@ from aafinfo.models import (
     InputInfo,
     MarkerEntry,
     ReportModel,
+    ReportSummary,
     SourceProperties,
+    SourceFilesSummary,
     SourceMobEntry,
     TrackEntry,
     TrackKind,
@@ -159,6 +161,7 @@ def _build_report(aaf_file: object, input_info: InputInfo) -> ReportModel:
             composition,
         ),
         composition=composition_summary,
+        summary=ReportSummary(source_files=_source_files_summary(source_mobs)),
         tracks=tracks,
         clips=clips,
         source_mobs=sorted(source_mobs, key=lambda source: source.mob_id),
@@ -342,6 +345,18 @@ def _audio_file_types(source_mobs: list[SourceMobEntry]) -> list[str]:
     if any(source.linked_paths for source in audio_sources):
         file_types.append("Linked")
     return file_types
+
+
+def _source_files_summary(source_mobs: list[SourceMobEntry]) -> SourceFilesSummary:
+    source_file_mobs = [source for source in source_mobs if source.role == "source"]
+    embedded = sum(1 for source in source_file_mobs if source.is_embedded)
+    # Conservative QC default: if a source mob is not proven embedded, assume it is external.
+    linked = len(source_file_mobs) - embedded
+    return SourceFilesSummary(
+        count=len(source_file_mobs),
+        embedded=embedded,
+        linked=linked,
+    )
 
 
 def _video_frame_rate(
@@ -708,7 +723,11 @@ def _clip_entry(
 ) -> tuple[ClipEntry, int | None]:
     clip = positioned.clip
     source_mob = _resolve_source_mob(clip, warnings, f"track {track_index} clip {clip_index}")
-    source_description = _source_mob_entry(source_mob, set()) if source_mob is not None else None
+    source_description = (
+        _source_mob_entry(source_mob, set(), warnings)
+        if source_mob is not None
+        else None
+    )
     source_mob_id = source_description.mob_id if source_description is not None else ""
     source_basename = _source_basename(source_description)
     duration = max(0, _safe_int(getattr(clip, "length", None)) or 0)
@@ -778,9 +797,9 @@ def _extract_source_mobs(
     warnings: list[ReportWarning],
 ) -> list[SourceMobEntry]:
     source_mobs: list[SourceMobEntry] = []
-    for source_mob in _safe_iter(content.sourcemobs()):
+    for mob in _safe_iter(getattr(content, "mobs", [])):
         try:
-            source_mobs.append(_source_mob_entry(source_mob, embedded_mob_ids))
+            source_mobs.append(_source_mob_entry(mob, embedded_mob_ids, warnings))
         except Exception as exc:
             warnings.append(
                 ReportWarning(
@@ -791,8 +810,13 @@ def _extract_source_mobs(
     return source_mobs
 
 
-def _source_mob_entry(source_mob: mobs.SourceMob, embedded_mob_ids: set[str]) -> SourceMobEntry:
-    descriptor = _safe_get_value(source_mob, "EssenceDescription")
+def _source_mob_entry(
+    mob: object,
+    embedded_mob_ids: set[str],
+    warnings: list[ReportWarning],
+) -> SourceMobEntry:
+    role = _mob_role(mob, warnings)
+    descriptor = _safe_get_value(mob, "EssenceDescription")
     descriptors = list(_descriptor_tree(descriptor))
     wav_summaries = [
         summary
@@ -801,11 +825,11 @@ def _source_mob_entry(source_mob: mobs.SourceMob, embedded_mob_ids: set[str]) ->
     ]
     slot_lengths = [
         _safe_int(getattr(slot, "length", None))
-        for slot in _safe_iter(getattr(source_mob, "slots", []))
+        for slot in _safe_iter(getattr(mob, "slots", []))
     ]
     slot_media_kinds = [
         _safe_text(getattr(slot, "media_kind", None))
-        for slot in _safe_iter(getattr(source_mob, "slots", []))
+        for slot in _safe_iter(getattr(mob, "slots", []))
     ]
 
     channel_counts = [
@@ -827,11 +851,12 @@ def _source_mob_entry(source_mob: mobs.SourceMob, embedded_mob_ids: set[str]) ->
             if path
         }
     )
-    mob_id = str(source_mob.mob_id)
+    mob_id = str(getattr(mob, "mob_id", ""))
 
     return SourceMobEntry(
         mob_id=mob_id,
-        name=_safe_text(getattr(source_mob, "name", None), fallback="Source mob"),
+        name=_safe_text(getattr(mob, "name", None), fallback="Source mob"),
+        role=role,
         kind=_source_mob_kind(descriptors, slot_media_kinds),
         is_embedded=mob_id in embedded_mob_ids,
         linked_paths=linked_paths,
@@ -849,6 +874,24 @@ def _source_mob_entry(source_mob: mobs.SourceMob, embedded_mob_ids: set[str]) ->
             or max((length for length in slot_lengths if length is not None), default=None)
         ),
     )
+
+
+def _mob_role(mob: object, warnings: list[ReportWarning]) -> str:
+    if isinstance(mob, mobs.CompositionMob):
+        return "composition"
+    if isinstance(mob, mobs.MasterMob):
+        return "master"
+    if isinstance(mob, mobs.SourceMob):
+        return "source"
+
+    mob_id = _safe_text(getattr(mob, "mob_id", None), fallback="unknown mob id")
+    warnings.append(
+        ReportWarning(
+            code="unknown_mob_role",
+            message=f"Mob {mob_id} has unknown role {type(mob).__name__}.",
+        )
+    )
+    return "unknown"
 
 
 def _source_mob_kind(descriptors: Sequence[object], slot_media_kinds: Sequence[str]) -> str:

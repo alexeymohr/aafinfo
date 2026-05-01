@@ -87,9 +87,13 @@ def test_embedded_essence_fixture_report(tmp_path: Path) -> None:
 
     assert report.composition.track_count == 1
     assert report.tracks[0].clip_count == 1
-    assert len(report.source_mobs) == 1
-    assert report.source_mobs[0].is_embedded is True
-    assert report.source_mobs[0].linked_paths == []
+    source_file_mobs = [source for source in report.source_mobs if source.role == "source"]
+    assert len(source_file_mobs) == 1
+    assert source_file_mobs[0].is_embedded is True
+    assert source_file_mobs[0].linked_paths == []
+    assert report.summary.source_files.count == 1
+    assert report.summary.source_files.embedded == 1
+    assert report.summary.source_files.linked == 0
     assert report.source_properties.audio_file_types == ["Embedded"]
 
 

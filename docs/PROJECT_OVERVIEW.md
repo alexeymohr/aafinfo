@@ -9,13 +9,14 @@ AAFinfo is built for the practical "what is in this AAF" question that comes
 up during turnover, archive audit, and troubleshooting in post-production
 workflows. It is the open-source engine layer; a paid macOS app (AAFpeek)
 will later wrap it with drag-and-drop, customization, Quick Look support, and
-PDF export. AAFpeek lives in a separate repository and does not influence
-v0.1.0 of AAFinfo, except that the engine and model layers must remain
-importable as a Python library, free of CLI/HTML coupling.
+PDF export. AAFpeek lives in a separate repository and relies on the engine
+and model layers remaining importable as a Python library, free of CLI/HTML
+coupling.
 
-This repository targets a `0.1.0` initial release: the inspection MVP.
+This repository targets a `0.2.0` additive release: the inspection MVP plus
+JSON fields for downstream consumers.
 
-## Scope (v0.1.0)
+## Scope (v0.2.0)
 
 In scope:
 
@@ -23,6 +24,7 @@ In scope:
 - pyaaf2 as the sole parsing engine.
 - Composition summary, tracks list, clips list, source mob registry, and
   markers extraction.
+- Explicit mob roles and source-file summary counts for downstream consumers.
 - JSON report with explicit schema version.
 - Self-contained HTML report (inline CSS, no external assets, no JavaScript).
 - Filename-only display in primary tables, with a source registry holding
@@ -30,11 +32,11 @@ In scope:
 - Deterministic behavior: same input file yields the same report, modulo
   `run_id` and `run_started_at`.
 
-Out of scope for 0.1.0 (reserved for 0.2.0 or later):
+Out of scope for 0.2.0 (reserved for a later release):
 
 - Writing or editing AAFs of any kind.
 - Embedded essence extraction.
-- Transition and automation deep parsing (basic counts only in 0.1.0).
+- Transition and automation deep parsing.
 - LibAAF / aaftool integration or cross-engine reconciliation.
 
 ## Permanent Non-Goals
@@ -87,8 +89,8 @@ layers directly without going through the CLI. **The model is the contract.**
   `ReportModel`. Public entry point: `build_report(path: Path) -> ReportModel`.
 - `src/aafinfo/models.py` — Pydantic v2 models with `extra="forbid"`.
   Top-level `ReportModel` plus nested types: `InputInfo`, `CompositionSummary`,
-  `SourceProperties`, `TrackEntry`, `ClipEntry`, `SourceMobEntry`,
-  `MarkerEntry`, `Warning`. `schema_version: 2`.
+  `SourceProperties`, `ReportSummary`, `TrackEntry`, `ClipEntry`,
+  `SourceMobEntry`, `MarkerEntry`, `Warning`. `schema_version: "2.1"`.
 - `src/aafinfo/report.py` — Jinja2 HTML rendering. Loads template, inlines
   CSS, produces a single self-contained `.html` file from a `ReportModel`.
 - `src/aafinfo/templates/report.html.j2` — single Jinja2 template.
@@ -115,7 +117,7 @@ Supporting:
 Single-command shape. No subcommands.
 
 ```
-uv run aafinfo <file.aaf> [--out <dir>] [--json-only] [--filter <text>]
+uv run aafinfo <file.aaf> [--out <dir>] [--json] [--filter <text>]
                           [--no-clips] [--name <slug>] [--version]
 ```
 
@@ -123,8 +125,8 @@ Flags:
 
 - `<file.aaf>` — required, positional. Path to the input AAF.
 - `--out <dir>` — directory for report artifacts. Default: `./aafinfo-report/`.
-- `--json-only` — write nothing; print JSON to stdout. Mutually exclusive
-  with `--out`.
+- `--json` — write nothing; print JSON to stdout. Mutually exclusive with
+  `--out`. `--json-only` is accepted as a synonym.
 - `--filter <text>` — case-insensitive substring filter applied to the HTML
   report's clips table (matches against track name, clip name, source
   basename). Filtering is render-time only; the JSON report always contains
@@ -155,14 +157,14 @@ If a stable slug cannot be derived, fall back to `report.json` /
 
 ## JSON Report
 
-Schema version: `2`.
+Schema version: `"2.1"`.
 
 Top-level shape:
 
 ```jsonc
 {
-  "schema_version": 2,
-  "aafinfo_version": "0.1.0",
+  "schema_version": "2.1",
+  "aafinfo_version": "0.2.0",
   "run_id": "uuid",
   "run_started_at": "ISO-8601",
   "input": {
@@ -190,6 +192,13 @@ Top-level shape:
     "length_timecode": "01:00:00:00",
     "track_count": 8,
     "marker_count": 12
+  },
+  "summary": {
+    "source_files": {
+      "count": 24,
+      "embedded": 0,
+      "linked": 24
+    }
   },
   "tracks": [
     {
@@ -224,6 +233,7 @@ Top-level shape:
     {
       "mob_id": "...",
       "name": "...",
+      "role": "source",
       "kind": "audio",
       "is_embedded": false,
       "linked_paths": ["/abs/path/to/external.wav"],
@@ -253,7 +263,11 @@ Field rules:
 
 - `kind` for tracks: `"audio" | "video" | "timecode" | "other"`.
 - `channel_format`: `"mono" | "stereo" | "5.0" | "5.1" | "7.1" | "multi"`.
+- `role` for source mob registry entries:
+  `"composition" | "master" | "source" | "unknown"`.
 - `kind` for source mobs: `"audio" | "video" | "other"`.
+- `summary.source_files` counts registry entries with `role == "source"`.
+  A source mob that is not proven embedded is counted as linked.
 - `edit_rate` is always a string fraction (e.g. `"24000/1001"`) so non-integer
   rates round-trip losslessly. `edit_rate_decimal` is convenience-only.
 - All timecode strings derive from edit units and the composition's edit rate
@@ -285,9 +299,9 @@ Sections, in order:
 4. **Clips** — table: track, clip name, source basename, in TC, out TC,
    duration, fade in/out. Filtered by `--filter` if provided. Hidden by
    `--no-clips`.
-5. **Source mobs** — registry: mob id (truncated), name, embedded vs linked,
-   external path basename(s) with full path on hover/title, sample rate,
-   bit depth, channels, length.
+5. **Source mobs** — registry: mob id (truncated), name, role, embedded vs
+   linked status for source-file mobs, external path basename(s) with full path
+   on hover/title, sample rate, bit depth, channels, length.
 6. **Markers** — table: track, position TC, name, comment, color chip.
 7. **Warnings** — bulleted list of any structural issues encountered during
    parsing. Empty section if none, but the section header is always present.

@@ -144,7 +144,7 @@ def _source_rows(source_mobs: list[SourceMobEntry]) -> list[SourceMobRow]:
                 PathDisplay(basename=display_basename(path), full_path=path)
                 for path in source.linked_paths
             ],
-            status="Embedded" if source.is_embedded else "Linked",
+            status=_source_status(source),
             sample_rate=_optional_int(source.sample_rate, suffix=" Hz"),
             bit_depth=_optional_int(source.bit_depth, suffix=" bit"),
             channel_count=_optional_int(source.channel_count),
@@ -152,6 +152,12 @@ def _source_rows(source_mobs: list[SourceMobEntry]) -> list[SourceMobRow]:
         )
         for source in source_mobs
     ]
+
+
+def _source_status(source: SourceMobEntry) -> str:
+    if source.role != "source":
+        return "-"
+    return "Embedded" if source.is_embedded else "Linked"
 
 
 def _source_title(source: SourceMobEntry | None) -> str:

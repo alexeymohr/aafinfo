@@ -105,7 +105,10 @@ def test_html_report_contains_documented_sections_and_tables(tmp_path: Path) -> 
     assert "24 bit" in html
     assert "Linked" in html
     assert "dx_1.wav" in " ".join(parser.table_text["clips"])
-    assert "mx_1-2.wav" in " ".join(parser.table_text["source-mobs"])
+    source_mobs_text = " ".join(parser.table_text["source-mobs"])
+    assert "source" in source_mobs_text
+    assert "composition" in source_mobs_text
+    assert "mx_1-2.wav" in source_mobs_text
     assert "/Volumes/AAFinfo/dx_1.wav" in parser.titles
 
 

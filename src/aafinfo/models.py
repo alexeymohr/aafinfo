@@ -8,6 +8,7 @@ from pydantic import BaseModel, ConfigDict, Field
 TrackKind = Literal["audio", "video", "timecode", "other"]
 ChannelFormat = Literal["mono", "stereo", "5.0", "5.1", "7.1", "multi"]
 SourceMobKind = Literal["audio", "video", "other"]
+MobRole = Literal["composition", "master", "source", "unknown"]
 
 
 class SchemaModel(BaseModel):
@@ -43,6 +44,16 @@ class CompositionSummary(SchemaModel):
     marker_count: int = Field(ge=0)
 
 
+class SourceFilesSummary(SchemaModel):
+    count: int = Field(ge=0)
+    embedded: int = Field(ge=0)
+    linked: int = Field(ge=0)
+
+
+class ReportSummary(SchemaModel):
+    source_files: SourceFilesSummary
+
+
 class TrackEntry(SchemaModel):
     index: int = Field(ge=1)
     name: str
@@ -73,6 +84,7 @@ class ClipEntry(SchemaModel):
 class SourceMobEntry(SchemaModel):
     mob_id: str
     name: str
+    role: MobRole
     kind: SourceMobKind
     is_embedded: bool
     linked_paths: list[str]
@@ -97,13 +109,14 @@ class Warning(SchemaModel):
 
 
 class ReportModel(SchemaModel):
-    schema_version: Literal[2] = 2
+    schema_version: Literal["2.1"] = "2.1"
     aafinfo_version: str
     run_id: str
     run_started_at: str
     input: InputInfo
     source_properties: SourceProperties
     composition: CompositionSummary
+    summary: ReportSummary
     tracks: list[TrackEntry]
     clips: list[ClipEntry]
     source_mobs: list[SourceMobEntry]

@@ -42,7 +42,7 @@ aafinfo-report/simple-stereo-report.html
 Print JSON only:
 
 ```bash
-uv run aafinfo examples/_generated/simple_stereo.aaf --json-only
+uv run aafinfo examples/_generated/simple_stereo.aaf --json
 ```
 
 Run tests and the smoke flow:
@@ -55,7 +55,7 @@ uv run python examples/_smoke.py
 ## Command Reference
 
 ```bash
-uv run aafinfo <file.aaf> [--out <dir>] [--json-only] [--filter <text>]
+uv run aafinfo <file.aaf> [--out <dir>] [--json] [--filter <text>]
                           [--no-clips] [--name <slug>] [--version]
 ```
 
@@ -63,8 +63,9 @@ Options:
 
 - `--out <dir>`: directory for report artifacts. Defaults to
   `./aafinfo-report/`.
-- `--json-only`: write nothing; print schema-versioned JSON to stdout.
-  Mutually exclusive with explicit `--out`.
+- `--json`: write nothing; print schema-versioned JSON to stdout.
+  Mutually exclusive with explicit `--out`. `--json-only` is accepted as a
+  synonym.
 - `--filter <text>`: case-insensitive substring filter for the HTML clips
   table. It matches track name, clip name, and source basename. JSON still
   contains every clip.
@@ -79,15 +80,17 @@ If an output artifact already exists, AAFinfo writes a numbered sibling such as
 
 ## Output
 
-JSON reports use schema version `2` and include:
+JSON reports use schema version `"2.1"` and include:
 
 - input path, basename, size, and SHA-256
 - source properties: name, type, start time, timecode format, creating
   application, audio format summary, and video frame rate
 - composition summary
+- source-file summary counts under `summary.source_files`
 - tracks
 - clips
-- source mobs
+- source mobs with explicit `role` values: `composition`, `master`, `source`,
+  or `unknown`
 - markers
 - warnings
 
@@ -106,13 +109,15 @@ browser. The CLI does not generate PDF files directly.
 
 ## Scope
 
-AAFinfo v0.1.0 is the inspection MVP.
+AAFinfo v0.2.0 is the inspection MVP plus additive JSON fields for downstream
+consumers such as AAFpeek.
 
 In scope:
 
 - one AAF input at a time
 - pyaaf2-backed reading only
-- composition, tracks, clips, source mobs, markers, and warnings
+- composition, tracks, clips, source mobs, mob roles, source-file summary
+  counts, markers, and warnings
 - JSON and self-contained HTML report output
 - generated test fixtures only, no real-show media in the repository
 

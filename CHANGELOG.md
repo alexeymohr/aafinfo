@@ -1,12 +1,15 @@
 # Changelog
 
-## Unreleased
+## 0.2.0 - 2026-04-30
 
 - Fix clip and marker timeline timecodes to honor AAF timecode start and
   drop-frame formatting.
 - Report both embedded and linked audio file types when both are present.
 - Align pyaaf2 dependency and HTML report-order documentation with the current
   implementation.
+- Add source mob `role`, `summary.source_files`, and `--json` as a synonym for
+  `--json-only`.
+- Bump package version to 0.2.0 and report schema to `"2.1"`.
 
 ## 0.1.0 - 2026-04-25
 
