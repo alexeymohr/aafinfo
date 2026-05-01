@@ -20,7 +20,7 @@ from aafinfo.models import (
 
 def sample_report() -> ReportModel:
     return ReportModel(
-        aafinfo_version="0.3.0",
+        aafinfo_version="0.3.1",
         run_id="00000000-0000-0000-0000-000000000000",
         run_started_at="2026-04-24T00:00:00+00:00",
         input=InputInfo(

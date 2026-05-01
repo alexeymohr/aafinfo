@@ -349,9 +349,13 @@ def _audio_file_types(source_mobs: list[SourceMobEntry]) -> list[str]:
 
 
 def _source_files_summary(source_mobs: list[SourceMobEntry]) -> SourceFilesSummary:
-    source_file_mobs = [source for source in source_mobs if source.role == "source"]
+    source_file_mobs = [
+        source
+        for source in source_mobs
+        if source.role == "source" and source.has_essence
+    ]
     embedded = sum(1 for source in source_file_mobs if source.is_embedded)
-    # Conservative QC default: if a source mob is not proven embedded, assume it is external.
+    # Conservative QC default: if an essence-bearing source is not proven embedded, assume it is external.
     linked = len(source_file_mobs) - embedded
     return SourceFilesSummary(
         count=len(source_file_mobs),

@@ -86,7 +86,8 @@ JSON reports use schema version `"2.2"` and include:
 - source properties: name, type, start time, timecode format, creating
   application, audio format summary, and video frame rate
 - composition summary
-- source-file summary counts under `summary.source_files`
+- source-file summary counts under `summary.source_files`, counting only
+  `source_mobs[]` entries where `role == "source"` and `has_essence == true`
 - tracks
 - clips
 - source mobs with explicit `role` values: `composition`, `master`, `source`,
@@ -117,7 +118,7 @@ browser. The CLI does not generate PDF files directly.
 
 ## Scope
 
-AAFinfo v0.3.0 is the inspection MVP plus additive JSON fields for downstream
+AAFinfo v0.3.1 is the inspection MVP plus additive JSON fields for downstream
 consumers such as AAFpeek.
 
 In scope:

@@ -13,10 +13,10 @@ PDF export. AAFpeek lives in a separate repository and relies on the engine
 and model layers remaining importable as a Python library, free of CLI/HTML
 coupling.
 
-This repository targets a `0.3.0` additive release: the inspection MVP plus
+This repository targets a `0.3.1` patch release: the inspection MVP plus
 JSON fields for downstream consumers.
 
-## Scope (v0.3.0)
+## Scope (v0.3.1)
 
 In scope:
 
@@ -33,7 +33,7 @@ In scope:
 - Deterministic behavior: same input file yields the same report, modulo
   `run_id` and `run_started_at`.
 
-Out of scope for 0.3.0 (reserved for a later release):
+Out of scope for 0.3.1 (reserved for a later release):
 
 - Writing or editing AAFs of any kind.
 - Embedded essence extraction.
@@ -165,7 +165,7 @@ Top-level shape:
 ```jsonc
 {
   "schema_version": "2.2",
-  "aafinfo_version": "0.3.0",
+  "aafinfo_version": "0.3.1",
   "run_id": "uuid",
   "run_started_at": "ISO-8601",
   "input": {
@@ -271,8 +271,9 @@ Field rules:
 - `role` for source mob registry entries:
   `"composition" | "master" | "source" | "unknown"`.
 - `kind` for source mobs: `"audio" | "video" | "other"`.
-- `summary.source_files` counts registry entries with `role == "source"`.
-  A source mob that is not proven embedded is counted as linked.
+- `summary.source_files` counts registry entries with `role == "source"` and
+  `has_essence == true`. An essence-bearing source mob that is not proven
+  embedded is counted as linked.
 - `edit_rate` is always a string fraction (e.g. `"24000/1001"`) so non-integer
   rates round-trip losslessly. `edit_rate_decimal` is convenience-only.
 - All timecode strings derive from edit units and the composition's edit rate

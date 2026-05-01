@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.3.1 - 2026-05-01
+
+- Fix `summary.source_files` to count only actual essence-bearing source mobs
+  (`role == "source"` and `has_essence == true`).
+- Reference-only source mobs no longer inflate the aggregate linked count, so
+  summaries now match Source Files tables that filter to real audio files.
+- Keep report schema at `"2.2"` because the JSON shape is unchanged.
+
 ## 0.3.0 - 2026-05-01
 
 - Add SourceMobEntry `container`, `data_size_bytes`, `has_essence`, and

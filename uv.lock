@@ -7,7 +7,7 @@ constraints = [{ name = "packaging", specifier = "==25.0" }]
 
 [[package]]
 name = "aafinfo"
-version = "0.3.0"
+version = "0.3.1"
 source = { editable = "." }
 dependencies = [
     { name = "click" },

@@ -44,9 +44,9 @@ def test_audio_track_without_source_channel_metadata_reports_mono(tmp_path: Path
     assert report.tracks[0].kind == "audio"
     assert report.tracks[0].channel_count == 1
     assert report.tracks[0].channel_format == "mono"
-    assert report.summary.source_files.count == 1
+    assert report.summary.source_files.count == 0
     assert report.summary.source_files.embedded == 0
-    assert report.summary.source_files.linked == 1
+    assert report.summary.source_files.linked == 0
 
 
 def test_audio_channel_combiner_reports_combined_channel_count(tmp_path: Path) -> None:
@@ -149,6 +149,26 @@ def test_reference_only_source_mob_has_no_essence(tmp_path: Path) -> None:
     assert source.container is None
     assert source.data_size_bytes is None
     assert source.format_summary is None
+
+
+def test_source_files_summary_filters_reference_only_source_mobs(tmp_path: Path) -> None:
+    aaf_path = tmp_path / "mixed-reference-and-essence.aaf"
+    _write_mixed_reference_and_essence_aaf(aaf_path)
+
+    report = build_report(aaf_path)
+
+    source_mobs = [source for source in report.source_mobs if source.role == "source"]
+    displayed_source_files = [
+        source
+        for source in source_mobs
+        if source.has_essence
+    ]
+
+    assert len(source_mobs) == 2
+    assert [source.name for source in displayed_source_files] == ["audio.wav"]
+    assert report.summary.source_files.count == 1
+    assert report.summary.source_files.embedded == 0
+    assert report.summary.source_files.linked == 1
 
 
 def _write_minimal_aaf(path: Path) -> None:
@@ -297,13 +317,30 @@ def _write_container_formats_aaf(path: Path) -> None:
         aaf_file.content.mobs.append(composition)
 
 
+def _write_mixed_reference_and_essence_aaf(path: Path) -> None:
+    with aaf2.open(str(path), "w") as aaf_file:
+        audio_source = _add_mono_source(
+            aaf_file,
+            "audio.wav",
+            linked_path="/Volumes/Show/audio.wav",
+        )
+        reference_source = _add_reference_only_source(aaf_file, "session.ptx")
+
+        composition = aaf_file.create.CompositionMob("Mixed Reference And Essence")
+        composition.usage = "Usage_TopLevel"
+        for physical_track_number, source_mob in enumerate((audio_source, reference_source), 1):
+            slot = composition.create_sound_slot(edit_rate=25)
+            slot.name = f"A{physical_track_number}"
+            slot["PhysicalTrackNumber"].value = physical_track_number
+            slot.segment.components.append(
+                source_mob.create_source_clip(slot_id=1, start=0, length=25, media_kind="sound")
+            )
+        aaf_file.content.mobs.append(composition)
+
+
 def _write_missing_channel_count_aaf(path: Path) -> None:
     with aaf2.open(str(path), "w") as aaf_file:
-        source_mob = aaf_file.create.SourceMob("mono-without-channel-count.wav")
-        source_mob.descriptor = aaf_file.create.ImportDescriptor()
-        source_slot = source_mob.create_empty_slot(edit_rate=25, media_kind="sound", slot_id=1)
-        source_slot.segment.length = 100
-        aaf_file.content.mobs.append(source_mob)
+        source_mob = _add_reference_only_source(aaf_file, "mono-without-channel-count.wav")
 
         composition = aaf_file.create.CompositionMob("Missing Channel Count")
         composition.usage = "Usage_TopLevel"
@@ -416,6 +453,21 @@ def _add_mono_source(
         aaf_file.content.essencedata.append(essence_data)
         stream = essence_data.open("w")
         stream.write(b"embedded fixture data\n")
+    return source_mob
+
+
+def _add_reference_only_source(
+    aaf_file: object,
+    name: str,
+    *,
+    edit_rate: object = 25,
+    length: int = 100,
+) -> object:
+    source_mob = aaf_file.create.SourceMob(name)
+    source_mob.descriptor = aaf_file.create.ImportDescriptor()
+    source_slot = source_mob.create_empty_slot(edit_rate=edit_rate, media_kind="sound", slot_id=1)
+    source_slot.segment.length = length
+    aaf_file.content.mobs.append(source_mob)
     return source_mob
 
 
