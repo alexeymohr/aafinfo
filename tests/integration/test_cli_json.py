@@ -48,7 +48,7 @@ def test_json_only_prints_schema_report(tmp_path: Path) -> None:
 
     assert result.exit_code == 0, result.output
     report = ReportModel.model_validate(json.loads(result.output))
-    assert report.schema_version == "2.1"
+    assert report.schema_version == "2.2"
     assert report.composition.name == "simple_stereo"
     assert report.input.basename == "simple_stereo.aaf"
 
@@ -167,7 +167,7 @@ def test_slug_and_collision_helpers(tmp_path: Path) -> None:
 def _fixed_report() -> ReportModel:
     return ReportModel.model_validate(
         {
-            "aafinfo_version": "0.2.0",
+            "aafinfo_version": "0.3.0",
             "run_id": "00000000-0000-0000-0000-000000000000",
             "run_started_at": "2026-04-24T00:00:00+00:00",
             "input": {

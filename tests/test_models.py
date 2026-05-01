@@ -20,7 +20,7 @@ from aafinfo.models import (
 
 def sample_report() -> ReportModel:
     return ReportModel(
-        aafinfo_version="0.2.0",
+        aafinfo_version="0.3.0",
         run_id="00000000-0000-0000-0000-000000000000",
         run_started_at="2026-04-24T00:00:00+00:00",
         input=InputInfo(
@@ -93,6 +93,10 @@ def sample_report() -> ReportModel:
                 kind="audio",
                 is_embedded=False,
                 linked_paths=["/tmp/source.wav"],
+                container="WAV",
+                data_size_bytes=None,
+                has_essence=True,
+                format_summary="WAV 24/48",
                 sample_rate=48000,
                 bit_depth=24,
                 channel_count=1,
@@ -119,7 +123,7 @@ def test_report_model_round_trips_through_dumped_shape() -> None:
     reparsed = ReportModel.model_validate(report.model_dump())
 
     assert reparsed == report
-    assert reparsed.schema_version == "2.1"
+    assert reparsed.schema_version == "2.2"
 
 
 def test_models_forbid_extra_fields() -> None:

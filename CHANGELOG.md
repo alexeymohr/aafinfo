@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.3.0 - 2026-05-01
+
+- Add SourceMobEntry `container`, `data_size_bytes`, `has_essence`, and
+  `format_summary` fields for downstream source-file tables.
+- Classify WAV, BWF, AIFF, and MP3-like source descriptors, including BWF
+  detection via the WAV `Summary` RIFF `bext` chunk.
+- Report embedded essence stream sizes when data is stored in the AAF.
+- Bump package version to 0.3.0 and report schema to `"2.2"`.
+
 ## 0.2.0 - 2026-04-30
 
 - Fix clip and marker timeline timecodes to honor AAF timecode start and

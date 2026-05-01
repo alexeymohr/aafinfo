@@ -35,6 +35,7 @@ class SourceMobRow:
     short_mob_id: str
     linked_paths: list[PathDisplay]
     status: str
+    format_summary: str
     sample_rate: str
     bit_depth: str
     channel_count: str
@@ -145,6 +146,7 @@ def _source_rows(source_mobs: list[SourceMobEntry]) -> list[SourceMobRow]:
                 for path in source.linked_paths
             ],
             status=_source_status(source),
+            format_summary=source.format_summary or "-",
             sample_rate=_optional_int(source.sample_rate, suffix=" Hz"),
             bit_depth=_optional_int(source.bit_depth, suffix=" bit"),
             channel_count=_optional_int(source.channel_count),

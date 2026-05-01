@@ -13,10 +13,10 @@ PDF export. AAFpeek lives in a separate repository and relies on the engine
 and model layers remaining importable as a Python library, free of CLI/HTML
 coupling.
 
-This repository targets a `0.2.0` additive release: the inspection MVP plus
+This repository targets a `0.3.0` additive release: the inspection MVP plus
 JSON fields for downstream consumers.
 
-## Scope (v0.2.0)
+## Scope (v0.3.0)
 
 In scope:
 
@@ -24,7 +24,8 @@ In scope:
 - pyaaf2 as the sole parsing engine.
 - Composition summary, tracks list, clips list, source mob registry, and
   markers extraction.
-- Explicit mob roles and source-file summary counts for downstream consumers.
+- Explicit mob roles, source-file summary counts, and source-file format
+  metadata for downstream consumers.
 - JSON report with explicit schema version.
 - Self-contained HTML report (inline CSS, no external assets, no JavaScript).
 - Filename-only display in primary tables, with a source registry holding
@@ -32,7 +33,7 @@ In scope:
 - Deterministic behavior: same input file yields the same report, modulo
   `run_id` and `run_started_at`.
 
-Out of scope for 0.2.0 (reserved for a later release):
+Out of scope for 0.3.0 (reserved for a later release):
 
 - Writing or editing AAFs of any kind.
 - Embedded essence extraction.
@@ -90,7 +91,7 @@ layers directly without going through the CLI. **The model is the contract.**
 - `src/aafinfo/models.py` — Pydantic v2 models with `extra="forbid"`.
   Top-level `ReportModel` plus nested types: `InputInfo`, `CompositionSummary`,
   `SourceProperties`, `ReportSummary`, `TrackEntry`, `ClipEntry`,
-  `SourceMobEntry`, `MarkerEntry`, `Warning`. `schema_version: "2.1"`.
+  `SourceMobEntry`, `MarkerEntry`, `Warning`. `schema_version: "2.2"`.
 - `src/aafinfo/report.py` — Jinja2 HTML rendering. Loads template, inlines
   CSS, produces a single self-contained `.html` file from a `ReportModel`.
 - `src/aafinfo/templates/report.html.j2` — single Jinja2 template.
@@ -157,14 +158,14 @@ If a stable slug cannot be derived, fall back to `report.json` /
 
 ## JSON Report
 
-Schema version: `"2.1"`.
+Schema version: `"2.2"`.
 
 Top-level shape:
 
 ```jsonc
 {
-  "schema_version": "2.1",
-  "aafinfo_version": "0.2.0",
+  "schema_version": "2.2",
+  "aafinfo_version": "0.3.0",
   "run_id": "uuid",
   "run_started_at": "ISO-8601",
   "input": {
@@ -237,6 +238,10 @@ Top-level shape:
       "kind": "audio",
       "is_embedded": false,
       "linked_paths": ["/abs/path/to/external.wav"],
+      "container": "WAV",
+      "data_size_bytes": null,
+      "has_essence": true,
+      "format_summary": "WAV 24/48",
       "sample_rate": 48000,
       "bit_depth": 24,
       "channel_count": 2,
@@ -301,7 +306,7 @@ Sections, in order:
    `--no-clips`.
 5. **Source mobs** — registry: mob id (truncated), name, role, embedded vs
    linked status for source-file mobs, external path basename(s) with full path
-   on hover/title, sample rate, bit depth, channels, length.
+   on hover/title, format summary, sample rate, bit depth, channels, length.
 6. **Markers** — table: track, position TC, name, comment, color chip.
 7. **Warnings** — bulleted list of any structural issues encountered during
    parsing. Empty section if none, but the section header is always present.

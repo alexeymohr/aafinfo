@@ -28,6 +28,10 @@ def test_build_report_returns_populated_model_for_minimal_aaf(tmp_path: Path) ->
     assert source_entry.sample_rate == 48000
     assert source_entry.bit_depth == 24
     assert source_entry.linked_paths == ["/Volumes/Show/source.wav"]
+    assert source_entry.container == "WAV"
+    assert source_entry.data_size_bytes is None
+    assert source_entry.has_essence is True
+    assert source_entry.format_summary == "WAV 24/48"
     assert report.warnings == []
 
 
@@ -92,6 +96,10 @@ def test_mixed_embedded_and_linked_audio_file_types_are_both_reported(tmp_path: 
     assert report.source_properties.audio_file_types == ["Embedded", "Linked"]
     source_file_mobs = [source for source in report.source_mobs if source.role == "source"]
     assert {source.is_embedded for source in source_file_mobs} == {False, True}
+    linked_source = next(source for source in source_file_mobs if source.name == "linked.wav")
+    embedded_source = next(source for source in source_file_mobs if source.name == "embedded.wav")
+    assert linked_source.data_size_bytes is None
+    assert embedded_source.data_size_bytes == len(b"embedded fixture data\n")
     assert report.summary.source_files.count == 2
     assert report.summary.source_files.embedded == 1
     assert report.summary.source_files.linked == 1
@@ -108,6 +116,39 @@ def test_source_mob_roles_include_composition_master_and_source(tmp_path: Path) 
     assert report.summary.source_files.count == 1
     assert report.summary.source_files.embedded == 0
     assert report.summary.source_files.linked == 1
+
+
+def test_source_mob_container_has_essence_and_format_summary_fields(tmp_path: Path) -> None:
+    aaf_path = tmp_path / "container-formats.aaf"
+    _write_container_formats_aaf(aaf_path)
+
+    report = build_report(aaf_path)
+
+    source_mobs = {source.name: source for source in report.source_mobs if source.role == "source"}
+    assert source_mobs["pcm.wav"].container == "WAV"
+    assert source_mobs["pcm.wav"].has_essence is True
+    assert source_mobs["pcm.wav"].format_summary == "WAV 24/48"
+
+    assert source_mobs["broadcast.wav"].container == "BWF"
+    assert source_mobs["broadcast.wav"].has_essence is True
+    assert source_mobs["broadcast.wav"].format_summary == "BWF 16/44.1"
+
+    assert source_mobs["music.aiff"].container == "AIFF"
+    assert source_mobs["music.aiff"].has_essence is True
+    assert source_mobs["music.aiff"].format_summary == "AIFF 24/96"
+
+
+def test_reference_only_source_mob_has_no_essence(tmp_path: Path) -> None:
+    aaf_path = tmp_path / "reference-only.aaf"
+    _write_missing_channel_count_aaf(aaf_path)
+
+    report = build_report(aaf_path)
+
+    source = next(source for source in report.source_mobs if source.role == "source")
+    assert source.has_essence is False
+    assert source.container is None
+    assert source.data_size_bytes is None
+    assert source.format_summary is None
 
 
 def _write_minimal_aaf(path: Path) -> None:
@@ -217,6 +258,42 @@ def _write_mob_roles_aaf(path: Path) -> None:
         slot.segment.components.append(
             source_mob.create_source_clip(slot_id=1, start=0, length=25, media_kind="sound")
         )
+        aaf_file.content.mobs.append(composition)
+
+
+def _write_container_formats_aaf(path: Path) -> None:
+    with aaf2.open(str(path), "w") as aaf_file:
+        sources = [
+            _add_mono_source(
+                aaf_file,
+                "pcm.wav",
+                linked_path="/Volumes/Show/pcm.wav",
+            ),
+            _add_summary_source(
+                aaf_file,
+                "broadcast.wav",
+                descriptor_name="WAVEDescriptor",
+                summary=_wav_summary_bytes(channels=1, sample_rate=44100, bit_depth=16, bext=True),
+                linked_path="/Volumes/Show/broadcast.wav",
+            ),
+            _add_summary_source(
+                aaf_file,
+                "music.aiff",
+                descriptor_name="AIFCDescriptor",
+                summary=_aiff_summary_bytes(channels=2, sample_rate=96000, bit_depth=24),
+                linked_path="/Volumes/Show/music.aiff",
+            ),
+        ]
+
+        composition = aaf_file.create.CompositionMob("Container Formats")
+        composition.usage = "Usage_TopLevel"
+        for physical_track_number, source_mob in enumerate(sources, 1):
+            slot = composition.create_sound_slot(edit_rate=25)
+            slot.name = f"A{physical_track_number}"
+            slot["PhysicalTrackNumber"].value = physical_track_number
+            slot.segment.components.append(
+                source_mob.create_source_clip(slot_id=1, start=0, length=25, media_kind="sound")
+            )
         aaf_file.content.mobs.append(composition)
 
 
@@ -340,3 +417,84 @@ def _add_mono_source(
         stream = essence_data.open("w")
         stream.write(b"embedded fixture data\n")
     return source_mob
+
+
+def _add_summary_source(
+    aaf_file: object,
+    name: str,
+    *,
+    descriptor_name: str,
+    summary: bytes,
+    linked_path: str,
+    edit_rate: object = 25,
+    length: int = 100,
+) -> object:
+    source_mob = aaf_file.create.SourceMob(name)
+    descriptor = getattr(aaf_file.create, descriptor_name)()
+    descriptor["SampleRate"].value = edit_rate
+    descriptor["Length"].value = length
+    descriptor["Summary"].value = summary
+    locator = aaf_file.create.NetworkLocator()
+    locator["URLString"].value = linked_path
+    descriptor["Locator"].append(locator)
+    source_mob.descriptor = descriptor
+    source_slot = source_mob.create_empty_slot(edit_rate=edit_rate, media_kind="sound", slot_id=1)
+    source_slot.segment.length = length
+    aaf_file.content.mobs.append(source_mob)
+    return source_mob
+
+
+def _wav_summary_bytes(
+    *,
+    channels: int,
+    sample_rate: int,
+    bit_depth: int,
+    bext: bool = False,
+) -> bytes:
+    block_align = channels * max(1, bit_depth // 8)
+    byte_rate = sample_rate * block_align
+    fmt_payload = b"".join(
+        (
+            (1).to_bytes(2, "little"),
+            channels.to_bytes(2, "little"),
+            sample_rate.to_bytes(4, "little"),
+            byte_rate.to_bytes(4, "little"),
+            block_align.to_bytes(2, "little"),
+            bit_depth.to_bytes(2, "little"),
+        )
+    )
+    chunks = [_riff_chunk(b"fmt ", fmt_payload)]
+    if bext:
+        chunks.append(_riff_chunk(b"bext", b""))
+    payload = b"WAVE" + b"".join(chunks)
+    return b"RIFF" + len(payload).to_bytes(4, "little") + payload
+
+
+def _riff_chunk(chunk_id: bytes, payload: bytes) -> bytes:
+    padding = b"\x00" if len(payload) % 2 else b""
+    return chunk_id + len(payload).to_bytes(4, "little") + payload + padding
+
+
+def _aiff_summary_bytes(*, channels: int, sample_rate: int, bit_depth: int) -> bytes:
+    comm_payload = b"".join(
+        (
+            channels.to_bytes(2, "big"),
+            (100).to_bytes(4, "big"),
+            bit_depth.to_bytes(2, "big"),
+            _extended80(sample_rate),
+        )
+    )
+    payload = b"AIFF" + _aiff_chunk(b"COMM", comm_payload)
+    return b"FORM" + len(payload).to_bytes(4, "big") + payload
+
+
+def _aiff_chunk(chunk_id: bytes, payload: bytes) -> bytes:
+    padding = b"\x00" if len(payload) % 2 else b""
+    return chunk_id + len(payload).to_bytes(4, "big") + payload + padding
+
+
+def _extended80(value: int) -> bytes:
+    floor_log2 = value.bit_length() - 1
+    exponent = 16383 + floor_log2
+    mantissa = value << (63 - floor_log2)
+    return exponent.to_bytes(2, "big") + mantissa.to_bytes(8, "big")

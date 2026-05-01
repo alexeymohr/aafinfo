@@ -9,6 +9,7 @@ TrackKind = Literal["audio", "video", "timecode", "other"]
 ChannelFormat = Literal["mono", "stereo", "5.0", "5.1", "7.1", "multi"]
 SourceMobKind = Literal["audio", "video", "other"]
 MobRole = Literal["composition", "master", "source", "unknown"]
+SourceContainer = Literal["WAV", "AIFF", "BWF", "MP3"]
 
 
 class SchemaModel(BaseModel):
@@ -88,6 +89,10 @@ class SourceMobEntry(SchemaModel):
     kind: SourceMobKind
     is_embedded: bool
     linked_paths: list[str]
+    container: SourceContainer | None
+    data_size_bytes: int | None = Field(default=None, ge=0)
+    has_essence: bool
+    format_summary: str | None
     sample_rate: int | None = Field(default=None, ge=0)
     bit_depth: int | None = Field(default=None, ge=0)
     channel_count: int | None = Field(default=None, ge=0)
@@ -109,7 +114,7 @@ class Warning(SchemaModel):
 
 
 class ReportModel(SchemaModel):
-    schema_version: Literal["2.1"] = "2.1"
+    schema_version: Literal["2.2"] = "2.2"
     aafinfo_version: str
     run_id: str
     run_started_at: str

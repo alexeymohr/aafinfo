@@ -44,6 +44,11 @@ def test_simple_stereo_fixture_report(tmp_path: Path) -> None:
     assert report.source_properties.audio_bit_depths == [24]
     assert report.source_properties.audio_sample_rates == [48000]
     assert report.source_properties.audio_file_types == ["Linked"]
+    source = next(source for source in report.source_mobs if source.role == "source")
+    assert source.container == "WAV"
+    assert source.data_size_bytes is None
+    assert source.has_essence is True
+    assert source.format_summary == "WAV 24/48"
     assert report.source_properties.video_frame_rate == "25 fps"
     assert [clip.duration_timecode for clip in report.clips] == [
         "00:00:01:00",
@@ -90,6 +95,8 @@ def test_embedded_essence_fixture_report(tmp_path: Path) -> None:
     source_file_mobs = [source for source in report.source_mobs if source.role == "source"]
     assert len(source_file_mobs) == 1
     assert source_file_mobs[0].is_embedded is True
+    assert source_file_mobs[0].data_size_bytes == len(b"AAFinfo embedded fixture data\n")
+    assert source_file_mobs[0].has_essence is True
     assert source_file_mobs[0].linked_paths == []
     assert report.summary.source_files.count == 1
     assert report.summary.source_files.embedded == 1

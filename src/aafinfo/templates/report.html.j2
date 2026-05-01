@@ -205,6 +205,7 @@
                 <th scope="col">Role</th>
                 <th scope="col">Status</th>
                 <th scope="col">External path basenames</th>
+                <th scope="col">Format</th>
                 <th scope="col">Sample rate</th>
                 <th scope="col">Bit depth</th>
                 <th scope="col">Channels</th>
@@ -229,6 +230,7 @@
                       <span class="muted">No linked paths</span>
                     {% endif %}
                   </td>
+                  <td class="mono">{{ row.format_summary }}</td>
                   <td class="mono">{{ row.sample_rate }}</td>
                   <td class="mono">{{ row.bit_depth }}</td>
                   <td class="mono">{{ row.channel_count }}</td>
@@ -236,7 +238,7 @@
                 </tr>
               {% else %}
                 <tr>
-                  <td colspan="9" class="empty">No source mobs found.</td>
+                  <td colspan="10" class="empty">No source mobs found.</td>
                 </tr>
               {% endfor %}
             </tbody>

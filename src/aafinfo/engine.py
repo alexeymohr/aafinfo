@@ -4,6 +4,7 @@ from collections.abc import Iterable, Iterator, Sequence
 from dataclasses import dataclass
 from datetime import datetime, timezone
 import hashlib
+import math
 from pathlib import Path
 from uuid import uuid4
 
@@ -117,7 +118,7 @@ def _sha256(path: Path) -> str:
 def _build_report(aaf_file: object, input_info: InputInfo) -> ReportModel:
     warnings: list[ReportWarning] = []
     content = aaf_file.content
-    embedded_mob_ids = _embedded_mob_ids(content)
+    embedded_data_sizes = _embedded_data_sizes(content)
     composition = _select_composition(content, warnings)
     edit_rate = _composition_edit_rate(composition, warnings)
     timecode_info = _composition_timecode_info(composition)
@@ -128,7 +129,7 @@ def _build_report(aaf_file: object, input_info: InputInfo) -> ReportModel:
         timecode_info,
         warnings,
     )
-    source_mobs = _extract_source_mobs(content, embedded_mob_ids, warnings)
+    source_mobs = _extract_source_mobs(content, embedded_data_sizes, warnings)
     source_mobs_by_id = {source.mob_id: source for source in source_mobs}
     clips = [
         _clip_with_source_basename(clip, source_mobs_by_id)
@@ -724,7 +725,7 @@ def _clip_entry(
     clip = positioned.clip
     source_mob = _resolve_source_mob(clip, warnings, f"track {track_index} clip {clip_index}")
     source_description = (
-        _source_mob_entry(source_mob, set(), warnings)
+        _source_mob_entry(source_mob, {}, warnings)
         if source_mob is not None
         else None
     )
@@ -793,13 +794,13 @@ def _safe_mob(clip: components.SourceClip) -> object | None:
 
 def _extract_source_mobs(
     content: object,
-    embedded_mob_ids: set[str],
+    embedded_data_sizes: dict[str, int | None],
     warnings: list[ReportWarning],
 ) -> list[SourceMobEntry]:
     source_mobs: list[SourceMobEntry] = []
     for mob in _safe_iter(getattr(content, "mobs", [])):
         try:
-            source_mobs.append(_source_mob_entry(mob, embedded_mob_ids, warnings))
+            source_mobs.append(_source_mob_entry(mob, embedded_data_sizes, warnings))
         except Exception as exc:
             warnings.append(
                 ReportWarning(
@@ -812,15 +813,21 @@ def _extract_source_mobs(
 
 def _source_mob_entry(
     mob: object,
-    embedded_mob_ids: set[str],
+    embedded_data_sizes: dict[str, int | None],
     warnings: list[ReportWarning],
 ) -> SourceMobEntry:
     role = _mob_role(mob, warnings)
     descriptor = _safe_get_value(mob, "EssenceDescription")
     descriptors = list(_descriptor_tree(descriptor))
+    summaries = [_safe_get_value(desc, "Summary") for desc in descriptors]
     wav_summaries = [
         summary
-        for summary in (_wav_summary(_safe_get_value(desc, "Summary")) for desc in descriptors)
+        for summary in (_wav_summary(value) for value in summaries)
+        if summary
+    ]
+    aiff_summaries = [
+        summary
+        for summary in (_aiff_summary(value) for value in summaries)
         if summary
     ]
     slot_lengths = [
@@ -840,7 +847,7 @@ def _source_mob_entry(
     if not channel_counts:
         channel_counts = [
             summary["channels"]
-            for summary in wav_summaries
+            for summary in (*wav_summaries, *aiff_summaries)
             if "channels" in summary
         ]
     linked_paths = sorted(
@@ -852,23 +859,40 @@ def _source_mob_entry(
         }
     )
     mob_id = str(getattr(mob, "mob_id", ""))
+    sample_rate = (
+        _first_int_property(descriptors, ("AudioSamplingRate",))
+        or _first_summary_value(wav_summaries, "sample_rate")
+        or _first_summary_value(aiff_summaries, "sample_rate")
+        or _first_int_property(descriptors, ("SampleRate",))
+    )
+    bit_depth = (
+        _first_int_property(descriptors, ("QuantizationBits", "BitsPerSample"))
+        or _first_summary_value(wav_summaries, "bit_depth")
+        or _first_summary_value(aiff_summaries, "bit_depth")
+    )
+    channel_count = (
+        sum(channel_counts)
+        if len(channel_counts) > 1
+        else (channel_counts[0] if channel_counts else None)
+    )
+    detected_container = _source_container(descriptors)
+    has_essence = sample_rate is not None and bit_depth is not None and channel_count is not None
+    container = detected_container if has_essence else None
 
     return SourceMobEntry(
         mob_id=mob_id,
         name=_safe_text(getattr(mob, "name", None), fallback="Source mob"),
         role=role,
         kind=_source_mob_kind(descriptors, slot_media_kinds),
-        is_embedded=mob_id in embedded_mob_ids,
+        is_embedded=mob_id in embedded_data_sizes,
         linked_paths=linked_paths,
-        sample_rate=(
-            _first_int_property(descriptors, ("AudioSamplingRate", "SampleRate"))
-            or _first_summary_value(wav_summaries, "sample_rate")
-        ),
-        bit_depth=(
-            _first_int_property(descriptors, ("QuantizationBits", "BitsPerSample"))
-            or _first_summary_value(wav_summaries, "bit_depth")
-        ),
-        channel_count=sum(channel_counts) if len(channel_counts) > 1 else (channel_counts[0] if channel_counts else None),
+        container=container,
+        data_size_bytes=embedded_data_sizes.get(mob_id),
+        has_essence=has_essence,
+        format_summary=_format_summary(container, bit_depth, sample_rate) if has_essence else None,
+        sample_rate=sample_rate,
+        bit_depth=bit_depth,
+        channel_count=channel_count,
         length_edit_units=(
             _first_int_property(descriptors, ("Length",))
             or max((length for length in slot_lengths if length is not None), default=None)
@@ -906,6 +930,52 @@ def _source_mob_kind(descriptors: Sequence[object], slot_media_kinds: Sequence[s
     if any(isinstance(desc, essence.DigitalImageDescriptor) for desc in descriptors):
         return "video"
     return "other"
+
+
+def _source_container(descriptors: Sequence[object]) -> str | None:
+    for descriptor in descriptors:
+        if isinstance(descriptor, essence.WAVEDescriptor):
+            return (
+                "BWF"
+                if _summary_has_riff_chunk(_safe_get_value(descriptor, "Summary"), b"bext")
+                else "WAV"
+            )
+
+    for descriptor in descriptors:
+        if isinstance(descriptor, essence.AIFCDescriptor):
+            return "AIFF"
+
+    for descriptor in descriptors:
+        if isinstance(descriptor, essence.PCMDescriptor):
+            # PCMDescriptor is how pyaaf2 represents the common Pro Tools WAV source case.
+            return (
+                "BWF"
+                if _summary_has_riff_chunk(_safe_get_value(descriptor, "Summary"), b"bext")
+                else "WAV"
+            )
+
+    for descriptor in descriptors:
+        class_name = type(descriptor).__name__.lower()
+        if "mp3" in class_name or "mpeg" in class_name:
+            return "MP3"
+
+    return None
+
+
+def _format_summary(
+    container: str | None,
+    bit_depth: int | None,
+    sample_rate: int | None,
+) -> str | None:
+    if container is None or bit_depth is None or sample_rate is None:
+        return None
+
+    sample_rate_khz = sample_rate / 1000
+    if sample_rate % 1000 == 0:
+        sample_rate_text = str(sample_rate // 1000)
+    else:
+        sample_rate_text = f"{sample_rate_khz:.1f}"
+    return f"{container} {bit_depth}/{sample_rate_text}"
 
 
 def _descriptor_tree(descriptor: object | None) -> Iterator[object]:
@@ -1042,13 +1112,25 @@ def _iter_markers(segment: object, visited: set[int] | None = None) -> Iterator[
             yield from _iter_markers(child, visited)
 
 
-def _embedded_mob_ids(content: object) -> set[str]:
-    ids: set[str] = set()
+def _embedded_data_sizes(content: object) -> dict[str, int | None]:
+    sizes: dict[str, int | None] = {}
     for essence_data in _safe_iter(getattr(content, "essencedata", [])):
         mob_id = _safe_get_value(essence_data, "MobID")
         if mob_id is not None:
-            ids.add(str(mob_id))
-    return ids
+            sizes[str(mob_id)] = _essence_data_size(essence_data)
+    return sizes
+
+
+def _essence_data_size(essence_data: object) -> int | None:
+    try:
+        stream = essence_data.open("r")
+        position = stream.tell()
+        stream.seek(0, 2)
+        size = stream.tell()
+        stream.seek(position)
+        return _safe_int(size)
+    except Exception:
+        return None
 
 
 def _first_int_property(descriptors: Sequence[object], names: Sequence[str]) -> int | None:
@@ -1068,17 +1150,20 @@ def _first_summary_value(summaries: Sequence[dict[str, int]], key: str) -> int |
     return None
 
 
-def _wav_summary(value: object) -> dict[str, int]:
+def _summary_bytes(value: object) -> bytes | None:
     if value is None:
-        return {}
+        return None
 
     try:
-        data = bytes(value)  # type: ignore[arg-type]
+        return bytes(value)  # type: ignore[arg-type]
     except (TypeError, ValueError):
-        return {}
+        return None
 
-    if len(data) < 36 or data[:4] != b"RIFF" or data[8:12] != b"WAVE":
-        return {}
+
+def _iter_riff_chunks(value: object) -> Iterator[tuple[bytes, bytes]]:
+    data = _summary_bytes(value)
+    if data is None or len(data) < 12 or data[:4] != b"RIFF" or data[8:12] != b"WAVE":
+        return
 
     offset = 12
     while offset + 8 <= len(data):
@@ -1086,14 +1171,74 @@ def _wav_summary(value: object) -> dict[str, int]:
         chunk_size = int.from_bytes(data[offset + 4:offset + 8], "little")
         chunk_start = offset + 8
         chunk_end = chunk_start + chunk_size
-        if chunk_id == b"fmt " and chunk_size >= 16 and chunk_end <= len(data):
+        if chunk_end > len(data):
+            return
+        yield chunk_id, data[chunk_start:chunk_end]
+        offset = chunk_end + (chunk_size % 2)
+
+
+def _summary_has_riff_chunk(value: object, chunk_id: bytes) -> bool:
+    return any(candidate == chunk_id for candidate, _ in _iter_riff_chunks(value))
+
+
+def _wav_summary(value: object) -> dict[str, int]:
+    for chunk_id, chunk_data in _iter_riff_chunks(value):
+        if chunk_id == b"fmt " and len(chunk_data) >= 16:
             return {
-                "channels": int.from_bytes(data[chunk_start + 2:chunk_start + 4], "little"),
-                "sample_rate": int.from_bytes(data[chunk_start + 4:chunk_start + 8], "little"),
-                "bit_depth": int.from_bytes(data[chunk_start + 14:chunk_start + 16], "little"),
+                "channels": int.from_bytes(chunk_data[2:4], "little"),
+                "sample_rate": int.from_bytes(chunk_data[4:8], "little"),
+                "bit_depth": int.from_bytes(chunk_data[14:16], "little"),
+            }
+    return {}
+
+
+def _aiff_summary(value: object) -> dict[str, int]:
+    data = _summary_bytes(value)
+    if (
+        data is None
+        or len(data) < 30
+        or data[:4] != b"FORM"
+        or data[8:12] not in {b"AIFF", b"AIFC"}
+    ):
+        return {}
+
+    offset = 12
+    while offset + 8 <= len(data):
+        chunk_id = data[offset:offset + 4]
+        chunk_size = int.from_bytes(data[offset + 4:offset + 8], "big")
+        chunk_start = offset + 8
+        chunk_end = chunk_start + chunk_size
+        if chunk_end > len(data):
+            return {}
+        if chunk_id == b"COMM" and chunk_size >= 18:
+            sample_rate = _extended80_to_int(data[chunk_start + 8:chunk_start + 18])
+            if sample_rate is None:
+                return {}
+            return {
+                "channels": int.from_bytes(data[chunk_start:chunk_start + 2], "big"),
+                "sample_rate": sample_rate,
+                "bit_depth": int.from_bytes(data[chunk_start + 6:chunk_start + 8], "big"),
             }
         offset = chunk_end + (chunk_size % 2)
     return {}
+
+
+def _extended80_to_int(data: bytes) -> int | None:
+    if len(data) != 10:
+        return None
+
+    exponent = int.from_bytes(data[:2], "big")
+    if exponent & 0x8000:
+        return None
+    exponent &= 0x7FFF
+    mantissa = int.from_bytes(data[2:], "big")
+    if exponent == 0 and mantissa == 0:
+        return 0
+
+    value = math.ldexp(float(mantissa), exponent - 16383 - 63)
+    if not math.isfinite(value) or value < 0:
+        return None
+    return int(round(value))
 
 
 def _safe_int(value: object) -> int | None:

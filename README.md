@@ -80,7 +80,7 @@ If an output artifact already exists, AAFinfo writes a numbered sibling such as
 
 ## Output
 
-JSON reports use schema version `"2.1"` and include:
+JSON reports use schema version `"2.2"` and include:
 
 - input path, basename, size, and SHA-256
 - source properties: name, type, start time, timecode format, creating
@@ -91,8 +91,16 @@ JSON reports use schema version `"2.1"` and include:
 - clips
 - source mobs with explicit `role` values: `composition`, `master`, `source`,
   or `unknown`
+- source mob file metadata for GUI consumers: `container`, `data_size_bytes`,
+  `has_essence`, and `format_summary`
 - markers
 - warnings
+
+For `source_mobs[]`, `container` is one of `WAV`, `BWF`, `AIFF`, `MP3`, or
+`null`; BWF is reported when a WAV `Summary` contains a RIFF `bext` chunk.
+`data_size_bytes` is populated only for embedded essence stored in the AAF.
+`has_essence` is true when audio sample rate, bit depth, and channel count are
+known, and `format_summary` is the display string such as `WAV 24/48`.
 
 HTML reports contain the same report data in this order:
 
@@ -109,7 +117,7 @@ browser. The CLI does not generate PDF files directly.
 
 ## Scope
 
-AAFinfo v0.2.0 is the inspection MVP plus additive JSON fields for downstream
+AAFinfo v0.3.0 is the inspection MVP plus additive JSON fields for downstream
 consumers such as AAFpeek.
 
 In scope:
@@ -117,7 +125,7 @@ In scope:
 - one AAF input at a time
 - pyaaf2-backed reading only
 - composition, tracks, clips, source mobs, mob roles, source-file summary
-  counts, markers, and warnings
+  counts, source file format metadata, markers, and warnings
 - JSON and self-contained HTML report output
 - generated test fixtures only, no real-show media in the repository
 
