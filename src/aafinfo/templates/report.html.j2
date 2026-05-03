@@ -161,7 +161,7 @@
                 <tr>
                   <th scope="col">Track</th>
                   <th scope="col">Clip name</th>
-                  <th scope="col">Source basename</th>
+                  <th scope="col">Source file</th>
                   <th scope="col">In TC</th>
                   <th scope="col">Out TC</th>
                   <th scope="col">Duration</th>
@@ -174,7 +174,7 @@
                   <tr>
                     <td><span class="mono">{{ row.clip.track_index }}</span> {{ row.track_name }}</td>
                     <td>{{ row.clip.name }}</td>
-                    <td class="mono" {% if row.source_title %}title="{{ row.source_title }}"{% endif %}>{{ row.clip.source_basename }}</td>
+                    <td class="mono" {% if row.source_title %}title="{{ row.source_title }}"{% endif %}>{{ row.source_display }}</td>
                     <td class="mono">{{ row.clip.in_timecode }}</td>
                     <td class="mono">{{ row.clip.out_timecode }}</td>
                     <td class="mono">{{ row.clip.duration_timecode }}</td>

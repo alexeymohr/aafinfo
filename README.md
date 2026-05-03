@@ -67,7 +67,7 @@ Options:
   Mutually exclusive with explicit `--out`. `--json-only` is accepted as a
   synonym.
 - `--filter <text>`: case-insensitive substring filter for the HTML clips
-  table. It matches track name, clip name, and source basename. JSON still
+  table. It matches track name, clip name, source file name, and source basename. JSON still
   contains every clip.
 - `--no-clips`: omit the per-clip table from the HTML report. JSON is
   unaffected.
@@ -80,7 +80,7 @@ If an output artifact already exists, AAFinfo writes a numbered sibling such as
 
 ## Output
 
-JSON reports use schema version `"2.2"` and include:
+JSON reports use schema version `"2.3"` and include:
 
 - input path, basename, size, and SHA-256
 - source properties: name, type, start time, timecode format, creating
@@ -89,19 +89,28 @@ JSON reports use schema version `"2.2"` and include:
 - source-file summary counts under `summary.source_files`, counting only
   `source_mobs[]` entries where `role == "source"` and `has_essence == true`
 - tracks
-- clips
+- clips, including `source_file_name` when the underlying source file identity
+  can be resolved separately from the editor-facing clip name
 - source mobs with explicit `role` values: `composition`, `master`, `source`,
   or `unknown`
 - source mob file metadata for GUI consumers: `container`, `data_size_bytes`,
-  `has_essence`, and `format_summary`
+  `has_essence`, `format_summary`, and `name_source`
 - markers
 - warnings
+
+For `clips[]`, `name` remains the clip or region label from the timeline.
+`source_file_name` is the resolved source-file identity, using descriptor
+locators, BWF `bext` metadata, SourceMob names, then MasterMob names. It is
+`null` when the chain only exposes generic placeholders.
 
 For `source_mobs[]`, `container` is one of `WAV`, `BWF`, `AIFF`, `MP3`, or
 `null`; BWF is reported when a WAV `Summary` contains a RIFF `bext` chunk.
 `data_size_bytes` is populated only for embedded essence stored in the AAF.
 `has_essence` is true when audio sample rate, bit depth, and channel count are
 known, and `format_summary` is the display string such as `WAV 24/48`.
+Source mob `name` is now the best available source-file identity rather than
+verbatim `SourceMob.Name`; `name_source` reports whether it came from
+`locator`, `bext`, `sourcemob_name`, `mastermob_name`, or `placeholder`.
 
 HTML reports contain the same report data in this order:
 
@@ -118,15 +127,16 @@ browser. The CLI does not generate PDF files directly.
 
 ## Scope
 
-AAFinfo v0.3.1 is the inspection MVP plus additive JSON fields for downstream
+AAFinfo v0.4.0 is the inspection MVP plus additive JSON fields for downstream
 consumers such as AAFpeek.
 
 In scope:
 
 - one AAF input at a time
 - pyaaf2-backed reading only
-- composition, tracks, clips, source mobs, mob roles, source-file summary
-  counts, source file format metadata, markers, and warnings
+- composition, tracks, clips, resolved source-file names, source mobs, mob
+  roles, source-file summary counts, source file format metadata, markers, and
+  warnings
 - JSON and self-contained HTML report output
 - generated test fixtures only, no real-show media in the repository
 

@@ -20,7 +20,7 @@ from aafinfo.models import (
 
 def sample_report() -> ReportModel:
     return ReportModel(
-        aafinfo_version="0.3.1",
+        aafinfo_version="0.4.0",
         run_id="00000000-0000-0000-0000-000000000000",
         run_started_at="2026-04-24T00:00:00+00:00",
         input=InputInfo(
@@ -74,6 +74,7 @@ def sample_report() -> ReportModel:
                 clip_index=0,
                 name="Clip",
                 source_basename="source.wav",
+                source_file_name="source.wav",
                 source_mob_id="mob-id",
                 in_edit_units=0,
                 out_edit_units=100,
@@ -89,6 +90,7 @@ def sample_report() -> ReportModel:
             SourceMobEntry(
                 mob_id="mob-id",
                 name="source.wav",
+                name_source="locator",
                 role="source",
                 kind="audio",
                 is_embedded=False,
@@ -123,7 +125,7 @@ def test_report_model_round_trips_through_dumped_shape() -> None:
     reparsed = ReportModel.model_validate(report.model_dump())
 
     assert reparsed == report
-    assert reparsed.schema_version == "2.2"
+    assert reparsed.schema_version == "2.3"
 
 
 def test_models_forbid_extra_fields() -> None:

@@ -13,10 +13,10 @@ PDF export. AAFpeek lives in a separate repository and relies on the engine
 and model layers remaining importable as a Python library, free of CLI/HTML
 coupling.
 
-This repository targets a `0.3.1` patch release: the inspection MVP plus
+This repository targets a `0.4.0` release: the inspection MVP plus
 JSON fields for downstream consumers.
 
-## Scope (v0.3.1)
+## Scope (v0.4.0)
 
 In scope:
 
@@ -33,7 +33,7 @@ In scope:
 - Deterministic behavior: same input file yields the same report, modulo
   `run_id` and `run_started_at`.
 
-Out of scope for 0.3.1 (reserved for a later release):
+Out of scope for 0.4.0 (reserved for a later release):
 
 - Writing or editing AAFs of any kind.
 - Embedded essence extraction.
@@ -91,7 +91,7 @@ layers directly without going through the CLI. **The model is the contract.**
 - `src/aafinfo/models.py` — Pydantic v2 models with `extra="forbid"`.
   Top-level `ReportModel` plus nested types: `InputInfo`, `CompositionSummary`,
   `SourceProperties`, `ReportSummary`, `TrackEntry`, `ClipEntry`,
-  `SourceMobEntry`, `MarkerEntry`, `Warning`. `schema_version: "2.2"`.
+  `SourceMobEntry`, `MarkerEntry`, `Warning`. `schema_version: "2.3"`.
 - `src/aafinfo/report.py` — Jinja2 HTML rendering. Loads template, inlines
   CSS, produces a single self-contained `.html` file from a `ReportModel`.
 - `src/aafinfo/templates/report.html.j2` — single Jinja2 template.
@@ -158,14 +158,14 @@ If a stable slug cannot be derived, fall back to `report.json` /
 
 ## JSON Report
 
-Schema version: `"2.2"`.
+Schema version: `"2.3"`.
 
 Top-level shape:
 
 ```jsonc
 {
-  "schema_version": "2.2",
-  "aafinfo_version": "0.3.1",
+  "schema_version": "2.3",
+  "aafinfo_version": "0.4.0",
   "run_id": "uuid",
   "run_started_at": "ISO-8601",
   "input": {
@@ -219,6 +219,7 @@ Top-level shape:
       "clip_index": 0,
       "name": "...",
       "source_basename": "...",
+      "source_file_name": "external.wav",
       "source_mob_id": "...",
       "in_edit_units": 0,
       "out_edit_units": 240,
@@ -234,6 +235,7 @@ Top-level shape:
     {
       "mob_id": "...",
       "name": "...",
+      "name_source": "locator",
       "role": "source",
       "kind": "audio",
       "is_embedded": false,
@@ -271,6 +273,13 @@ Field rules:
 - `role` for source mob registry entries:
   `"composition" | "master" | "source" | "unknown"`.
 - `kind` for source mobs: `"audio" | "video" | "other"`.
+- `clips[].name` is the timeline clip label. `clips[].source_file_name` is
+  the resolved source-file identity when the source chain exposes one.
+- `source_mobs[].name` is the best available source-file identity for source
+  mobs, using descriptor locators, BWF `bext` metadata, SourceMob names, then
+  MasterMob names before falling back to `"Source mob"`.
+- `source_mobs[].name_source` is `null` for non-source entries and otherwise
+  `"locator" | "bext" | "sourcemob_name" | "mastermob_name" | "placeholder"`.
 - `summary.source_files` counts registry entries with `role == "source"` and
   `has_essence == true`. An essence-bearing source mob that is not proven
   embedded is counted as linked.
@@ -302,7 +311,7 @@ Sections, in order:
    version if extractable, run timestamp, AAFinfo version, schema version,
    run id.
 3. **Tracks** — table: index, name, kind, channel format, length, clip count.
-4. **Clips** — table: track, clip name, source basename, in TC, out TC,
+4. **Clips** — table: track, clip name, source file, in TC, out TC,
    duration, fade in/out. Filtered by `--filter` if provided. Hidden by
    `--no-clips`.
 5. **Source mobs** — registry: mob id (truncated), name, role, embedded vs
@@ -330,8 +339,9 @@ The pyaaf2 walk should:
   as a warning.
 - For each track, resolve its segment(s) and enumerate operation groups,
   source clips, transitions, and filler.
-- For each source clip, resolve to its source mob and capture the source
-  basename, mob id, and sample/channel info if extractable.
+- For each source clip, resolve through MasterMob to SourceMob where present
+  and capture the source file name, source basename, mob id, and
+  sample/channel info if extractable.
 - Capture markers as encountered on tracks or at composition level.
 - Treat any pyaaf2 exception during a per-track or per-clip walk as a
   `warnings[]` entry, not a hard failure. Continue with the rest of the

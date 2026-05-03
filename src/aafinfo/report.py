@@ -25,6 +25,7 @@ class ClipRow:
     clip: ClipEntry
     track_name: str
     source_title: str
+    source_display: str
     fade_in: str
     fade_out: str
 
@@ -115,6 +116,7 @@ def _clip_rows(
                 clip=clip,
                 track_name=track_names.get(clip.track_index, f"Track {clip.track_index}"),
                 source_title=_source_title(source),
+                source_display=clip.source_file_name or clip.source_basename or "-",
                 fade_in=_fade_label(clip.fade_in_edit_units),
                 fade_out=_fade_label(clip.fade_out_edit_units),
             )
@@ -132,6 +134,7 @@ def _filter_clip_rows(rows: list[ClipRow], filter_text: str | None) -> list[Clip
         for row in rows
         if needle in row.track_name.casefold()
         or needle in row.clip.name.casefold()
+        or (row.clip.source_file_name is not None and needle in row.clip.source_file_name.casefold())
         or needle in row.clip.source_basename.casefold()
     ]
 

@@ -23,8 +23,11 @@ def test_build_report_returns_populated_model_for_minimal_aaf(tmp_path: Path) ->
     assert report.tracks[0].kind == "audio"
     assert report.tracks[0].channel_count == 2
     assert report.clips[0].source_basename == "source.wav"
+    assert report.clips[0].source_file_name == "source.wav"
     assert report.clips[0].duration_timecode == "00:00:04:00"
     source_entry = next(source for source in report.source_mobs if source.role == "source")
+    assert source_entry.name == "source.wav"
+    assert source_entry.name_source == "locator"
     assert source_entry.sample_rate == 48000
     assert source_entry.bit_depth == 24
     assert source_entry.linked_paths == ["/Volumes/Show/source.wav"]
@@ -138,6 +141,75 @@ def test_source_mob_container_has_essence_and_format_summary_fields(tmp_path: Pa
     assert source_mobs["music.aiff"].format_summary == "AIFF 24/96"
 
 
+def test_clip_source_file_name_uses_locator_through_master_chain(tmp_path: Path) -> None:
+    aaf_path = tmp_path / "avid-locator-chain.aaf"
+    _write_avid_locator_chain_aaf(aaf_path)
+
+    report = build_report(aaf_path)
+
+    clip = report.clips[0]
+    assert clip.name == "HOST takes 1-3"
+    assert clip.source_file_name == "ISO1_B_01_take03.wav"
+    assert clip.source_basename == "ISO1_B_01_take03.wav"
+
+    source = next(source for source in report.source_mobs if source.role == "source")
+    assert source.name == "ISO1_B_01_take03.wav"
+    assert source.name_source == "locator"
+
+
+def test_source_mob_name_uses_bext_originator_reference(tmp_path: Path) -> None:
+    aaf_path = tmp_path / "bext-name.aaf"
+    _write_bext_name_aaf(aaf_path)
+
+    report = build_report(aaf_path)
+
+    clip = report.clips[0]
+    assert clip.source_file_name == "BWF_ORIG_REF_001.wav"
+    source = next(source for source in report.source_mobs if source.role == "source")
+    assert source.name == "BWF_ORIG_REF_001.wav"
+    assert source.name_source == "bext"
+    assert source.container == "BWF"
+
+
+def test_source_mob_name_uses_bext_audio_file_source_path(tmp_path: Path) -> None:
+    aaf_path = tmp_path / "bext-audio-file-source-name.aaf"
+    _write_bext_audio_file_source_name_aaf(aaf_path)
+
+    report = build_report(aaf_path)
+
+    clip = report.clips[0]
+    assert clip.source_file_name == "AUDIO_FILE_SOURCE.wav"
+    source = next(source for source in report.source_mobs if source.role == "source")
+    assert source.name == "AUDIO_FILE_SOURCE.wav"
+    assert source.name_source == "bext"
+
+
+def test_source_mob_name_uses_master_name_after_placeholder_source_name(tmp_path: Path) -> None:
+    aaf_path = tmp_path / "master-name-fallback.aaf"
+    _write_master_name_fallback_aaf(aaf_path)
+
+    report = build_report(aaf_path)
+
+    clip = report.clips[0]
+    assert clip.source_file_name == "Recovered_Master_File.wav"
+    source = next(source for source in report.source_mobs if source.role == "source")
+    assert source.name == "Recovered_Master_File.wav"
+    assert source.name_source == "mastermob_name"
+
+
+def test_placeholder_source_names_do_not_become_clip_source_file_name(tmp_path: Path) -> None:
+    aaf_path = tmp_path / "placeholder-source-name.aaf"
+    _write_placeholder_source_name_aaf(aaf_path)
+
+    report = build_report(aaf_path)
+
+    clip = report.clips[0]
+    assert clip.source_file_name is None
+    source = next(source for source in report.source_mobs if source.role == "source")
+    assert source.name == "Source mob"
+    assert source.name_source == "placeholder"
+
+
 def test_reference_only_source_mob_has_no_essence(tmp_path: Path) -> None:
     aaf_path = tmp_path / "reference-only.aaf"
     _write_missing_channel_count_aaf(aaf_path)
@@ -146,6 +218,7 @@ def test_reference_only_source_mob_has_no_essence(tmp_path: Path) -> None:
 
     source = next(source for source in report.source_mobs if source.role == "source")
     assert source.has_essence is False
+    assert source.name_source == "sourcemob_name"
     assert source.container is None
     assert source.data_size_bytes is None
     assert source.format_summary is None
@@ -169,6 +242,111 @@ def test_source_files_summary_filters_reference_only_source_mobs(tmp_path: Path)
     assert report.summary.source_files.count == 1
     assert report.summary.source_files.embedded == 0
     assert report.summary.source_files.linked == 1
+
+
+def _write_avid_locator_chain_aaf(path: Path) -> None:
+    with aaf2.open(str(path), "w") as aaf_file:
+        source_mob = _add_mono_source(
+            aaf_file,
+            "Source mob",
+            linked_path="file:///Volumes/Show/ISO1_B_01_take03.wav",
+        )
+        master_mob = _add_master_mob(aaf_file, "HOST source master", source_mob)
+
+        composition = aaf_file.create.CompositionMob("Avid Locator Chain")
+        composition.usage = "Usage_TopLevel"
+        slot = composition.create_sound_slot(edit_rate=25)
+        slot.name = "A1"
+        slot["PhysicalTrackNumber"].value = 1
+        clip = master_mob.create_source_clip(slot_id=1, start=0, length=25, media_kind="sound")
+        clip["UserComments"].append(aaf_file.create.TaggedValue("Name", "HOST takes 1-3"))
+        slot.segment.components.append(clip)
+        aaf_file.content.mobs.append(composition)
+
+
+def _write_bext_name_aaf(path: Path) -> None:
+    with aaf2.open(str(path), "w") as aaf_file:
+        source_mob = _add_summary_source(
+            aaf_file,
+            "SourceMob",
+            descriptor_name="WAVEDescriptor",
+            summary=_wav_summary_bytes(
+                channels=1,
+                sample_rate=48000,
+                bit_depth=24,
+                bext=True,
+                bext_originator_reference="BWF_ORIG_REF_001.wav",
+            ),
+            linked_path=None,
+        )
+
+        composition = aaf_file.create.CompositionMob("Bext Name")
+        composition.usage = "Usage_TopLevel"
+        slot = composition.create_sound_slot(edit_rate=25)
+        slot.name = "A1"
+        slot["PhysicalTrackNumber"].value = 1
+        slot.segment.components.append(
+            source_mob.create_source_clip(slot_id=1, start=0, length=25, media_kind="sound")
+        )
+        aaf_file.content.mobs.append(composition)
+
+
+def _write_bext_audio_file_source_name_aaf(path: Path) -> None:
+    with aaf2.open(str(path), "w") as aaf_file:
+        source_mob = _add_summary_source(
+            aaf_file,
+            "Source mob",
+            descriptor_name="WAVEDescriptor",
+            summary=_wav_summary_bytes(
+                channels=1,
+                sample_rate=48000,
+                bit_depth=24,
+                bext=True,
+                bext_audio_file_source="/Volumes/Show/AUDIO_FILE_SOURCE.wav",
+            ),
+            linked_path=None,
+        )
+
+        composition = aaf_file.create.CompositionMob("Bext AudioFileSource Name")
+        composition.usage = "Usage_TopLevel"
+        slot = composition.create_sound_slot(edit_rate=25)
+        slot.name = "A1"
+        slot["PhysicalTrackNumber"].value = 1
+        slot.segment.components.append(
+            source_mob.create_source_clip(slot_id=1, start=0, length=25, media_kind="sound")
+        )
+        aaf_file.content.mobs.append(composition)
+
+
+def _write_master_name_fallback_aaf(path: Path) -> None:
+    with aaf2.open(str(path), "w") as aaf_file:
+        source_mob = _add_mono_source(aaf_file, "Source mob")
+        master_mob = _add_master_mob(aaf_file, "Recovered_Master_File.wav", source_mob)
+
+        composition = aaf_file.create.CompositionMob("Master Name Fallback")
+        composition.usage = "Usage_TopLevel"
+        slot = composition.create_sound_slot(edit_rate=25)
+        slot.name = "A1"
+        slot["PhysicalTrackNumber"].value = 1
+        slot.segment.components.append(
+            master_mob.create_source_clip(slot_id=1, start=0, length=25, media_kind="sound")
+        )
+        aaf_file.content.mobs.append(composition)
+
+
+def _write_placeholder_source_name_aaf(path: Path) -> None:
+    with aaf2.open(str(path), "w") as aaf_file:
+        source_mob = _add_reference_only_source(aaf_file, "SourceMob")
+
+        composition = aaf_file.create.CompositionMob("Placeholder Source Name")
+        composition.usage = "Usage_TopLevel"
+        slot = composition.create_sound_slot(edit_rate=25)
+        slot.name = "A1"
+        slot["PhysicalTrackNumber"].value = 1
+        slot.segment.components.append(
+            source_mob.create_source_clip(slot_id=1, start=0, length=25, media_kind="sound")
+        )
+        aaf_file.content.mobs.append(composition)
 
 
 def _write_minimal_aaf(path: Path) -> None:
@@ -471,13 +649,33 @@ def _add_reference_only_source(
     return source_mob
 
 
+def _add_master_mob(
+    aaf_file: object,
+    name: str,
+    source_mob: object,
+    *,
+    edit_rate: object = 25,
+    length: int = 100,
+) -> object:
+    master_mob = aaf_file.create.MasterMob(name)
+    master_slot = master_mob.create_sound_slot(edit_rate=edit_rate)
+    master_slot.name = name
+    master_slot["PhysicalTrackNumber"].value = 1
+    master_slot.segment.length = length
+    master_slot.segment.components.append(
+        source_mob.create_source_clip(slot_id=1, start=0, length=length, media_kind="sound")
+    )
+    aaf_file.content.mobs.append(master_mob)
+    return master_mob
+
+
 def _add_summary_source(
     aaf_file: object,
     name: str,
     *,
     descriptor_name: str,
     summary: bytes,
-    linked_path: str,
+    linked_path: str | None,
     edit_rate: object = 25,
     length: int = 100,
 ) -> object:
@@ -486,9 +684,10 @@ def _add_summary_source(
     descriptor["SampleRate"].value = edit_rate
     descriptor["Length"].value = length
     descriptor["Summary"].value = summary
-    locator = aaf_file.create.NetworkLocator()
-    locator["URLString"].value = linked_path
-    descriptor["Locator"].append(locator)
+    if linked_path is not None:
+        locator = aaf_file.create.NetworkLocator()
+        locator["URLString"].value = linked_path
+        descriptor["Locator"].append(locator)
     source_mob.descriptor = descriptor
     source_slot = source_mob.create_empty_slot(edit_rate=edit_rate, media_kind="sound", slot_id=1)
     source_slot.segment.length = length
@@ -502,6 +701,8 @@ def _wav_summary_bytes(
     sample_rate: int,
     bit_depth: int,
     bext: bool = False,
+    bext_originator_reference: str | None = None,
+    bext_audio_file_source: str | None = None,
 ) -> bytes:
     block_align = channels * max(1, bit_depth // 8)
     byte_rate = sample_rate * block_align
@@ -517,7 +718,15 @@ def _wav_summary_bytes(
     )
     chunks = [_riff_chunk(b"fmt ", fmt_payload)]
     if bext:
-        chunks.append(_riff_chunk(b"bext", b""))
+        chunks.append(
+            _riff_chunk(
+                b"bext",
+                _bext_summary_payload(
+                    originator_reference=bext_originator_reference,
+                    audio_file_source=bext_audio_file_source,
+                ),
+            )
+        )
     payload = b"WAVE" + b"".join(chunks)
     return b"RIFF" + len(payload).to_bytes(4, "little") + payload
 
@@ -525,6 +734,34 @@ def _wav_summary_bytes(
 def _riff_chunk(chunk_id: bytes, payload: bytes) -> bytes:
     padding = b"\x00" if len(payload) % 2 else b""
     return chunk_id + len(payload).to_bytes(4, "little") + payload + padding
+
+
+def _bext_summary_payload(
+    *,
+    originator_reference: str | None = None,
+    audio_file_source: str | None = None,
+) -> bytes:
+    payload = b"".join(
+        (
+            _fixed_bext_field("", 256),
+            _fixed_bext_field("", 32),
+            _fixed_bext_field(originator_reference or "", 32),
+            _fixed_bext_field("2026-05-03", 10),
+            _fixed_bext_field("120000", 8),
+            b"\x00" * 8,
+            b"\x00" * 2,
+            b"\x00" * 64,
+            b"\x00" * 190,
+        )
+    )
+    if audio_file_source is not None:
+        payload += f"AudioFileSource={audio_file_source}\n".encode("utf-8")
+    return payload
+
+
+def _fixed_bext_field(value: str, size: int) -> bytes:
+    encoded = value.encode("utf-8")[:size]
+    return encoded + (b"\x00" * (size - len(encoded)))
 
 
 def _aiff_summary_bytes(*, channels: int, sample_rate: int, bit_depth: int) -> bytes:

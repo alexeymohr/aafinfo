@@ -10,6 +10,7 @@ ChannelFormat = Literal["mono", "stereo", "5.0", "5.1", "7.1", "multi"]
 SourceMobKind = Literal["audio", "video", "other"]
 MobRole = Literal["composition", "master", "source", "unknown"]
 SourceContainer = Literal["WAV", "AIFF", "BWF", "MP3"]
+SourceNameSource = Literal["locator", "bext", "sourcemob_name", "mastermob_name", "placeholder"]
 
 
 class SchemaModel(BaseModel):
@@ -71,6 +72,7 @@ class ClipEntry(SchemaModel):
     clip_index: int = Field(ge=0)
     name: str
     source_basename: str
+    source_file_name: str | None = None
     source_mob_id: str
     in_edit_units: int = Field(ge=0)
     out_edit_units: int = Field(ge=0)
@@ -85,6 +87,7 @@ class ClipEntry(SchemaModel):
 class SourceMobEntry(SchemaModel):
     mob_id: str
     name: str
+    name_source: SourceNameSource | None = None
     role: MobRole
     kind: SourceMobKind
     is_embedded: bool
@@ -114,7 +117,7 @@ class Warning(SchemaModel):
 
 
 class ReportModel(SchemaModel):
-    schema_version: Literal["2.2"] = "2.2"
+    schema_version: Literal["2.3"] = "2.3"
     aafinfo_version: str
     run_id: str
     run_started_at: str

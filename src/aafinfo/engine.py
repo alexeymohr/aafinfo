@@ -48,6 +48,18 @@ class _PositionedClip:
 
 
 @dataclass(frozen=True)
+class _ResolvedSourceChain:
+    source_mob: mobs.SourceMob | None
+    master_mob: mobs.MasterMob | None
+
+
+@dataclass(frozen=True)
+class _SourceNameCandidate:
+    name: str
+    source: str
+
+
+@dataclass(frozen=True)
 class _TimecodeInfo:
     start_frames: int
     fps: int
@@ -129,10 +141,16 @@ def _build_report(aaf_file: object, input_info: InputInfo) -> ReportModel:
         timecode_info,
         warnings,
     )
-    source_mobs = _extract_source_mobs(content, embedded_data_sizes, warnings)
+    source_master_names = _source_master_mob_names(content, warnings)
+    source_mobs = _extract_source_mobs(
+        content,
+        embedded_data_sizes,
+        warnings,
+        source_master_names,
+    )
     source_mobs_by_id = {source.mob_id: source for source in source_mobs}
     clips = [
-        _clip_with_source_basename(clip, source_mobs_by_id)
+        _clip_with_source_reference(clip, source_mobs_by_id)
         for clip in clips
     ]
 
@@ -727,19 +745,22 @@ def _clip_entry(
     warnings: list[ReportWarning],
 ) -> tuple[ClipEntry, int | None]:
     clip = positioned.clip
-    source_mob = _resolve_source_mob(clip, warnings, f"track {track_index} clip {clip_index}")
+    source_chain = _resolve_source_chain(clip, warnings, f"track {track_index} clip {clip_index}")
+    source_mob = source_chain.source_mob
+    master_mob_name = _non_placeholder_mob_name(source_chain.master_mob)
     source_description = (
-        _source_mob_entry(source_mob, {}, warnings)
+        _source_mob_entry(source_mob, {}, warnings, master_mob_name)
         if source_mob is not None
         else None
     )
     source_mob_id = source_description.mob_id if source_description is not None else ""
+    source_file_name = _source_file_name(source_description)
     source_basename = _source_basename(source_description)
     duration = max(0, _safe_int(getattr(clip, "length", None)) or 0)
     start = max(0, positioned.start_edit_units)
     end = start + duration
 
-    name = _safe_text(_safe_get_value(clip, "Name"), fallback=source_basename or f"Clip {clip_index}")
+    name = _clip_name(clip, fallback=source_file_name or source_basename or f"Clip {clip_index}")
 
     return (
         ClipEntry(
@@ -747,6 +768,7 @@ def _clip_entry(
             clip_index=clip_index,
             name=name,
             source_basename=source_basename,
+            source_file_name=source_file_name,
             source_mob_id=source_mob_id,
             in_edit_units=start,
             out_edit_units=end,
@@ -761,18 +783,18 @@ def _clip_entry(
     )
 
 
-def _resolve_source_mob(
+def _resolve_source_chain(
     clip: components.SourceClip,
     warnings: list[ReportWarning],
     context: str,
-) -> mobs.SourceMob | None:
-    source_mobs: list[mobs.SourceMob] = []
-    _append_source_mob(source_mobs, _safe_mob(clip))
+) -> _ResolvedSourceChain:
+    mob_chain: list[object] = []
+    _append_chain_mob(mob_chain, _safe_mob(clip))
 
     try:
         for referenced in clip.walk():
             if isinstance(referenced, components.SourceClip):
-                _append_source_mob(source_mobs, _safe_mob(referenced))
+                _append_chain_mob(mob_chain, _safe_mob(referenced))
     except Exception as exc:
         warnings.append(
             ReportWarning(
@@ -781,12 +803,52 @@ def _resolve_source_mob(
             )
         )
 
-    return source_mobs[-1] if source_mobs else None
+    source_mob = next(
+        (candidate for candidate in reversed(mob_chain) if isinstance(candidate, mobs.SourceMob)),
+        None,
+    )
+    master_mob = next(
+        (candidate for candidate in reversed(mob_chain) if isinstance(candidate, mobs.MasterMob)),
+        None,
+    )
+    return _ResolvedSourceChain(source_mob=source_mob, master_mob=master_mob)
 
 
-def _append_source_mob(source_mobs: list[mobs.SourceMob], mob: object | None) -> None:
-    if isinstance(mob, mobs.SourceMob):
-        source_mobs.append(mob)
+def _clip_name(clip: object, *, fallback: str) -> str:
+    for property_name in ("Name", "Comment"):
+        name = _clean_text(_safe_get_value(clip, property_name))
+        if name is not None:
+            return name
+
+    tagged_name = _tagged_value_text(
+        clip,
+        property_names=("UserComments", "Attributes", "ComponentAttributeList"),
+        tag_names=("Name", "Clip Name", "ClipName"),
+    )
+    return tagged_name or fallback
+
+
+def _tagged_value_text(
+    obj: object,
+    *,
+    property_names: Sequence[str],
+    tag_names: Sequence[str],
+) -> str | None:
+    expected = {name.casefold() for name in tag_names}
+    for property_name in property_names:
+        for tagged_value in _safe_iter(_safe_get_value(obj, property_name)):
+            name = _clean_text(_safe_get_value(tagged_value, "Name"))
+            if name is None or name.casefold() not in expected:
+                continue
+            value = _clean_text(_safe_get_value(tagged_value, "Value"))
+            if value is not None:
+                return value
+    return None
+
+
+def _append_chain_mob(mob_chain: list[object], mob: object | None) -> None:
+    if isinstance(mob, (mobs.SourceMob, mobs.MasterMob)):
+        mob_chain.append(mob)
 
 
 def _safe_mob(clip: components.SourceClip) -> object | None:
@@ -800,11 +862,19 @@ def _extract_source_mobs(
     content: object,
     embedded_data_sizes: dict[str, int | None],
     warnings: list[ReportWarning],
+    source_master_names: dict[str, str],
 ) -> list[SourceMobEntry]:
     source_mobs: list[SourceMobEntry] = []
     for mob in _safe_iter(getattr(content, "mobs", [])):
         try:
-            source_mobs.append(_source_mob_entry(mob, embedded_data_sizes, warnings))
+            source_mobs.append(
+                _source_mob_entry(
+                    mob,
+                    embedded_data_sizes,
+                    warnings,
+                    source_master_names.get(str(getattr(mob, "mob_id", ""))),
+                )
+            )
         except Exception as exc:
             warnings.append(
                 ReportWarning(
@@ -819,6 +889,7 @@ def _source_mob_entry(
     mob: object,
     embedded_data_sizes: dict[str, int | None],
     warnings: list[ReportWarning],
+    master_mob_name: str | None = None,
 ) -> SourceMobEntry:
     role = _mob_role(mob, warnings)
     descriptor = _safe_get_value(mob, "EssenceDescription")
@@ -882,10 +953,18 @@ def _source_mob_entry(
     detected_container = _source_container(descriptors)
     has_essence = sample_rate is not None and bit_depth is not None and channel_count is not None
     container = detected_container if has_essence else None
+    name_candidate = _source_name_candidate(
+        mob,
+        role,
+        descriptors,
+        summaries,
+        master_mob_name,
+    )
 
     return SourceMobEntry(
         mob_id=mob_id,
-        name=_safe_text(getattr(mob, "name", None), fallback="Source mob"),
+        name=name_candidate.name,
+        name_source=name_candidate.source if role == "source" else None,
         role=role,
         kind=_source_mob_kind(descriptors, slot_media_kinds),
         is_embedded=mob_id in embedded_data_sizes,
@@ -902,6 +981,113 @@ def _source_mob_entry(
             or max((length for length in slot_lengths if length is not None), default=None)
         ),
     )
+
+
+def _source_master_mob_names(
+    content: object,
+    warnings: list[ReportWarning],
+) -> dict[str, str]:
+    source_master_names: dict[str, str] = {}
+    for mob in _safe_iter(getattr(content, "mobs", [])):
+        if not isinstance(mob, mobs.MasterMob):
+            continue
+
+        master_mob_name = _non_placeholder_mob_name(mob)
+        if master_mob_name is None:
+            continue
+
+        for slot in _safe_iter(getattr(mob, "slots", [])):
+            try:
+                positioned_clips = _iter_source_clips(getattr(slot, "segment", None), 0)
+                for positioned in positioned_clips:
+                    source_chain = _resolve_source_chain(
+                        positioned.clip,
+                        warnings,
+                        f"master mob {master_mob_name}",
+                    )
+                    if source_chain.source_mob is None:
+                        continue
+                    source_master_names.setdefault(
+                        str(getattr(source_chain.source_mob, "mob_id", "")),
+                        master_mob_name,
+                    )
+            except Exception as exc:
+                warnings.append(
+                    ReportWarning(
+                        code="master_source_resolution_failed",
+                        message=f"Master mob {master_mob_name} source links could not be read: {exc}",
+                    )
+                )
+    return source_master_names
+
+
+def _source_name_candidate(
+    mob: object,
+    role: str,
+    descriptors: Sequence[object],
+    summaries: Sequence[object],
+    master_mob_name: str | None,
+) -> _SourceNameCandidate:
+    if role != "source":
+        fallback = "Mob" if role == "unknown" else f"{role.title()} mob"
+        return _SourceNameCandidate(
+            name=_safe_text(getattr(mob, "name", None), fallback=fallback),
+            source="placeholder",
+        )
+
+    locator_name = _first_locator_name(descriptors)
+    if locator_name is not None:
+        return _SourceNameCandidate(name=locator_name, source="locator")
+
+    bext_name = _first_bext_source_name(summaries)
+    if bext_name is not None:
+        return _SourceNameCandidate(name=bext_name, source="bext")
+
+    source_mob_name = _non_placeholder_mob_name(mob)
+    if source_mob_name is not None:
+        return _SourceNameCandidate(name=source_mob_name, source="sourcemob_name")
+
+    if master_mob_name is not None:
+        return _SourceNameCandidate(name=master_mob_name, source="mastermob_name")
+
+    return _SourceNameCandidate(name="Source mob", source="placeholder")
+
+
+def _first_locator_name(descriptors: Sequence[object]) -> str | None:
+    for descriptor in descriptors:
+        for path in _descriptor_paths(descriptor):
+            name = _clean_text(display_basename(path))
+            if name is not None:
+                return name
+    return None
+
+
+def _first_bext_source_name(summaries: Sequence[object]) -> str | None:
+    for summary in summaries:
+        metadata = _bext_metadata(summary)
+        if not metadata:
+            continue
+
+        for key in ("originator_reference", "audio_file_source"):
+            name = _clean_text(metadata.get(key))
+            if name is not None:
+                return display_basename(name)
+    return None
+
+
+def _non_placeholder_mob_name(mob: object | None) -> str | None:
+    if mob is None:
+        return None
+    name = _clean_text(getattr(mob, "name", None))
+    if name is None or _is_placeholder_mob_name(name, type(mob).__name__):
+        return None
+    return name
+
+
+def _is_placeholder_mob_name(name: str, class_name: str) -> bool:
+    normalized = "".join(character for character in name.casefold() if character.isalnum())
+    class_normalized = "".join(character for character in class_name.casefold() if character.isalnum())
+    return normalized in {"mob", "sourcemob", "sourcemobs", class_normalized}
 
 
 def _mob_role(mob: object, warnings: list[ReportWarning]) -> str:
@@ -1003,20 +1189,46 @@ def _descriptor_paths(descriptor: object) -> Iterator[str]:
 def _source_basename(source_description: SourceMobEntry | None) -> str:
     if source_description is None:
         return ""
+    source_file_name = _source_file_name(source_description)
+    if source_file_name is not None:
+        return display_basename(source_file_name)
     if source_description.linked_paths:
         return display_basename(source_description.linked_paths[0])
     return source_description.name
 
 
-def _clip_with_source_basename(
+def _source_file_name(source_description: SourceMobEntry | None) -> str | None:
+    if source_description is None:
+        return None
+    if source_description.name_source in {
+        "locator",
+        "bext",
+        "sourcemob_name",
+        "mastermob_name",
+    }:
+        return source_description.name
+    return None
+
+
+def _clip_with_source_reference(
     clip: ClipEntry,
     source_mobs_by_id: dict[str, SourceMobEntry],
 ) -> ClipEntry:
-    if clip.source_basename:
+    source = source_mobs_by_id.get(clip.source_mob_id)
+    if source is None:
         return clip
 
-    source = source_mobs_by_id.get(clip.source_mob_id)
-    return clip.model_copy(update={"source_basename": _source_basename(source)})
+    updates: dict[str, str] = {}
+    if clip.source_file_name is None:
+        source_file_name = _source_file_name(source)
+        if source_file_name is not None:
+            updates["source_file_name"] = source_file_name
+    if not clip.source_basename:
+        updates["source_basename"] = _source_basename(source)
+
+    if not updates:
+        return clip
+    return clip.model_copy(update=updates)
 
 
 def _extract_markers(
@@ -1185,6 +1397,45 @@ def _summary_has_riff_chunk(value: object, chunk_id: bytes) -> bool:
     return any(candidate == chunk_id for candidate, _ in _iter_riff_chunks(value))
 
 
+def _bext_metadata(value: object) -> dict[str, str]:
+    for chunk_id, chunk_data in _iter_riff_chunks(value):
+        if chunk_id != b"bext":
+            continue
+
+        metadata = {
+            "description": _bext_fixed_string(chunk_data, 0, 256),
+            "originator": _bext_fixed_string(chunk_data, 256, 32),
+            "originator_reference": _bext_fixed_string(chunk_data, 288, 32),
+            "origination_date": _bext_fixed_string(chunk_data, 320, 10),
+            "origination_time": _bext_fixed_string(chunk_data, 330, 8),
+        }
+        audio_file_source = _bext_audio_file_source(chunk_data)
+        if audio_file_source is not None:
+            metadata["audio_file_source"] = audio_file_source
+        return {key: value for key, value in metadata.items() if value}
+    return {}
+
+
+def _bext_fixed_string(data: bytes, offset: int, size: int) -> str:
+    if len(data) < offset + size:
+        return ""
+    return data[offset:offset + size].split(b"\x00", 1)[0].decode("utf-8", errors="ignore").strip()
+
+
+def _bext_audio_file_source(data: bytes) -> str | None:
+    text = data.decode("utf-8", errors="ignore").replace("\x00", "\n")
+    for line in text.splitlines():
+        compact = line.replace(" ", "").casefold()
+        if not compact.startswith("audiofilesource"):
+            continue
+        _, separator, value = line.partition("=")
+        if not separator:
+            _, separator, value = line.partition(":")
+        if separator:
+            return _clean_text(value)
+    return None
+
+
 def _wav_summary(value: object) -> dict[str, int]:
     for chunk_id, chunk_data in _iter_riff_chunks(value):
         if chunk_id == b"fmt " and len(chunk_data) >= 16:
@@ -1272,6 +1523,14 @@ def _safe_optional_text(value: object) -> str | None:
         return None
     text = str(value)
     return text if text else None
+
+
+def _clean_text(value: object) -> str | None:
+    text = _safe_optional_text(value)
+    if text is None:
+        return None
+    stripped = text.strip()
+    return stripped if stripped else None
 
 
 def _safe_get_value(obj: object, key: str) -> object | None:

@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.4.0 - 2026-05-03
+
+- Add `clips[].source_file_name` so downstream consumers can distinguish
+  timeline clip labels from the underlying source-file identity.
+- Improve `source_mobs[].name` extraction for Avid Media Composer-style AAFs:
+  descriptor locators and BWF `bext` metadata now win over generic
+  `SourceMob.Name` placeholders, with SourceMob and MasterMob names as later
+  fallbacks.
+- Add `source_mobs[].name_source` to report whether a source mob name came
+  from `locator`, `bext`, `sourcemob_name`, `mastermob_name`, or `placeholder`.
+- Bump package version to 0.4.0 and report schema to `"2.3"` because existing
+  fields can now contain higher-quality values.
+
 ## 0.3.1 - 2026-05-01
 
 - Fix `summary.source_files` to count only actual essence-bearing source mobs
